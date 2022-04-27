@@ -1,0 +1,111 @@
+<?xml version="1.0" encoding="UTF-8"?><sqlb_project><db path="C:/Users/tonyb/Code/Rust/noted/data/dev.db" readonly="0" foreign_keys="1" case_sensitive_like="0" temp_store="0" wal_autocheckpoint="1000" synchronous="2"/><attached/><window><main_tabs open="structure browser pragmas query" current="1"/></window><tab_structure><column_width id="0" width="300"/><column_width id="1" width="0"/><column_width id="2" width="100"/><column_width id="3" width="3982"/><column_width id="4" width="0"/><expanded_item id="0" parent="1"/><expanded_item id="1" parent="1"/><expanded_item id="2" parent="1"/><expanded_item id="3" parent="1"/></tab_structure><tab_browse><current_table name="4,5:mainnotes"/><default_encoding codec=""/><browse_table_settings><table schema="main" name="notes" show_row_id="0" encoding="" plot_x_axis="" unlock_view_pk="_rowid_"><sort/><column_widths><column index="1" value="40"/><column index="2" value="129"/><column index="3" value="176"/><column index="4" value="79"/><column index="5" value="300"/><column index="6" value="40"/></column_widths><filter_values/><conditional_formats/><row_id_formats/><display_formats/><hidden_columns/><plot_y_axes/><global_filter/></table></browse_table_settings></tab_browse><tab_sql><sql name="SQL 1">-- sqlite
+-- Data table
+DROP TABLE IF EXISTS notes;
+DROP TABLE IF EXISTS notes_change_log;
+DROP TABLE IF EXISTS notes_fts;
+DROP TABLE IF EXISTS notes_fts_config;
+DROP TABLE IF EXISTS notes_fts_data;
+DROP TABLE IF EXISTS notes_fts_docsize;
+DROP TABLE IF EXISTS notes_fts_idx;
+
+CREATE TABLE notes (
+    id INTEGER PRIMARY KEY,
+    created TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    title TEXT NOT NULL DEFAULT '',
+    -- Changed from 'content' because sqlite fts5 uses content as a keyword
+    body TEXT NOT NULL DEFAULT '',
+    tags TEXT NOT NULL DEFAULT ''
+);
+
+CREATE VIRTUAL TABLE notes_fts USING fts5(title, body, tags, content=notes, content_rowid=id);
+
+-- Change log table
+CREATE TABLE notes_change_log (
+    id INTEGER PRIMARY KEY,
+    created TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    action TEXT,
+    table_name TEXT,
+    obj_id INTEGER,
+    oldvals TEXT
+);
+
+-- Update Trigger
+-- List all required fields after 'OF' except the LastUpdate field to prevent infinite loop
+CREATE TRIGGER notes_update_field 
+AFTER UPDATE OF title, body, tags ON notes
+BEGIN
+  UPDATE notes SET updated=CURRENT_TIMESTAMP WHERE id=NEW.id;
+END;
+
+-- Insert Trigger
+CREATE TRIGGER notes_track_insert
+AFTER INSERT ON notes
+BEGIN
+  INSERT INTO notes_change_log (action, table_name, obj_id)
+  VALUES ('INSERT', 'notes', NEW.id);
+END;
+
+-- Update Trigger
+CREATE TRIGGER notes_track_update
+AFTER UPDATE ON notes
+BEGIN
+  INSERT INTO notes_change_log (action, table_name, obj_id, oldvals)
+  SELECT
+    'UPDATE', 'notes', OLD.id, changes
+  FROM
+    (SELECT
+      json_group_object(col, oldval) AS changes
+    FROM
+      (SELECT
+        json_extract(value, '$[0]') as col,
+        json_extract(value, '$[1]') as oldval,
+        json_extract(value, '$[2]') as newval
+      FROM
+        json_each(
+          json_array(
+            json_array('id', OLD.id, NEW.id),
+            json_array('created', OLD.created, NEW.created),
+            json_array('updated', OLD.updated, NEW.updated),
+            json_array('title', OLD.title, NEW.title),
+            json_array('body', OLD.body, NEW.body),
+            json_array('tags', OLD.tags, NEW.tags)
+          )
+        )
+      WHERE oldval IS NOT newval
+      )
+    );
+END;
+
+-- Delete Trigger
+CREATE TRIGGER notes_track_delete
+AFTER DELETE ON notes
+BEGIN
+  INSERT INTO notes_change_log (action, table_name, obj_id, oldvals)
+  SELECT
+    'DELETE', 'notes', OLD.id, changes
+  FROM
+    (SELECT
+      json_group_object(col, oldval) AS changes
+    FROM
+      (SELECT
+        json_extract(value, '$[0]') as col,
+        json_extract(value, '$[1]') as oldval,
+        json_extract(value, '$[2]') as newval
+      FROM
+        json_each(
+          json_array(
+            json_array('id', OLD.id, null),
+            json_array('created', OLD.created, null),
+            json_array('updated', OLD.updated, null),
+            json_array('title', OLD.title, null),
+            json_array('body', OLD.body, null),
+            json_array('tags', OLD.tags, null)
+          )
+        )
+      WHERE oldval IS NOT newval
+      )
+    );
+END;</sql><sql name="SQL 2">INSERT INTO notes (title, body) VALUES (&quot;The first note&quot;, &quot;Here is some content for the first note.&quot;);
+INSERT INTO notes (title, body) VALUES (&quot;Note 2&quot;, &quot;Blah blah blah text for note 2.&quot;);
+</sql><sql name="SQL 3">UPDATE notes SET body = body || ' ' || 'More content for note 1.' WHERE id=1;</sql><current_tab id="2"/></tab_sql></sqlb_project>

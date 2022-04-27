@@ -1,0 +1,82 @@
+[package]
+default-run = "runner"
+edition = "2021"
+name = "noted"
+version = "0.1.0"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+bincode = "1.3.3"
+bit-vec = { version = "0.6.3", features = ["serde"] }
+bson = "2.2.0"
+bstr = { version = "0.2.17", features = ["serde"] }
+ciborium = "0.2.0"
+clap = { version = "3.1.12", features = [
+    "cargo",
+    # "debug",
+    "derive",
+    "terminal_size",
+    "wrap_help",
+    "unicode",
+] }
+copypasta = "0.7.1"
+crossterm = { version = "0.23.2", features = ["event-stream", "serde"] }
+fastrand = "1.7.0"
+flexbuffers = "2.0.0"
+jetscii = { version = "0.5.1", features = ["pattern"] }
+postcard = "0.7.3"
+rayon = "1.5.2"
+rmp = "0.8.11"
+rmp-serde = "1.1.0"
+rusqlite = { version = "0.27.0", features = [
+    "bundled-windows",
+    # "array",
+    "backup",
+    "blob",
+    "collation",
+    # "csvtab",
+    # "extra_check",
+    "functions",
+    "hooks",
+    "i128_blob",
+    "limits",
+    "load_extension",
+    "serde_json",
+    # "series",
+    "time",
+    "trace",
+    # "unlock_notify",
+    # "url",
+    "uuid",
+    # "vtab",
+    "window",
+] }
+serde = { version = "1.0.136", features = ["derive"] }
+serde_json = "1.0.79"
+shadow-rs = "0.11.0"
+sqlx = { version = "0.5.13", features = [
+    "runtime-tokio-rustls",
+    "sqlite",
+    "uuid",
+    "time",
+    "bstr",
+    "bit-vec",
+] }
+time = { version = "0.3.9", features = [
+    "formatting",
+    "local-offset",
+    "macros",
+    "parsing",
+    "serde",
+] }
+tokio = { version = "1.17.0", features = ["full"] }
+tui = { version = "0.18.0", features = ["serde"] }
+unicode-width = "0.1.9"
+uuid = { version = "1.0.0", features = ["serde", "v4", "v5"] }
+
+[dev-dependencies]
+pretty_assertions = "1.2.1"
+
+[build-dependencies]
+shadow-rs = "0.11.0"
