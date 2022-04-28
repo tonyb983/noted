@@ -7,4 +7,4 @@
 //!
 //! This is going to be an **interactive** cli application, along the lines of `gh repo create`. It will not be a full blown TUI,
 //! with a full interface and whatnot, but it will query the user in a pretty way, prompting for information until a request or
-//! command has been built.
+//! command has been "built", at which point it will execute and display results, very much like the normal `cli`.

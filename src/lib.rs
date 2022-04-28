@@ -44,6 +44,7 @@
 mod db;
 mod macros;
 mod server;
+mod services;
 mod term_ui;
 
 pub mod bins;
