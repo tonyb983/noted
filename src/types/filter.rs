@@ -131,54 +131,64 @@ impl NoteFilter {
         match self {
             NoteFilter::String(field, ss) => {
                 let field = *field;
-                let ss = ss.clone();
-                box move |&note| match &ss {
-                    StringSearch::Contains(args) => {
+                match ss.clone() {
+                    StringSearch::Contains(args) => box move |&note| {
                         let value = field.get_value(note);
                         if args.invert() {
                             !value.contains(args.text())
                         } else {
                             value.contains(args.text())
                         }
-                    }
-                    StringSearch::Matches(args) => {
+                    },
+                    StringSearch::Matches(args) => box move |&note| {
                         let value = field.get_value(note);
                         if args.invert() {
                             value != args.text()
                         } else {
                             value == args.text()
                         }
-                    }
-                    StringSearch::StartsWith(args) => {
+                    },
+                    StringSearch::StartsWith(args) => box move |&note| {
                         let value = field.get_value(note);
                         if args.invert() {
                             !value.starts_with(args.text())
                         } else {
                             value.starts_with(args.text())
                         }
-                    }
-                    StringSearch::EndsWith(args) => {
+                    },
+                    StringSearch::EndsWith(args) => box move |&note| {
                         let value = field.get_value(note);
                         if args.invert() {
                             !value.ends_with(args.text())
                         } else {
                             value.ends_with(args.text())
                         }
-                    }
+                    },
                 }
             }
             NoteFilter::Date(field, ds) => {
                 let field = *field;
-                let ds = ds.clone();
-                box move |note| {
-                    let value = *field.get_value(note);
-                    match ds {
-                        DateSearch::Before(other) => value < other,
-                        DateSearch::After(other) => value > other,
-                        DateSearch::On(other) => value == other,
-                        DateSearch::Between(a, b) => value >= a && value <= b,
-                        DateSearch::NotBetween(a, b) => value < a || value > b,
-                    }
+                match *ds {
+                    DateSearch::Before(other) => box move |note| {
+                        let value = *field.get_value(note);
+                        value < other
+                    },
+                    DateSearch::After(other) => box move |note| {
+                        let value = *field.get_value(note);
+                        value > other
+                    },
+                    DateSearch::On(other) => box move |note| {
+                        let value = *field.get_value(note);
+                        value == other
+                    },
+                    DateSearch::Between(a, b) => box move |note| {
+                        let value = *field.get_value(note);
+                        value >= a && value <= b
+                    },
+                    DateSearch::NotBetween(a, b) => box move |note| {
+                        let value = *field.get_value(note);
+                        value < a || value > b
+                    },
                 }
             }
         }
