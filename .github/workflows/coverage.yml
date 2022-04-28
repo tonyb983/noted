@@ -27,6 +27,7 @@ jobs:
           toolchain: nightly
           override: true
           profile: minimal
+          components: llvm-tools-preview
 
       - name: Execute tests
         uses: actions-rs/cargo@v1
