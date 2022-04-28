@@ -5,7 +5,7 @@
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 mod error;
-mod filter;
+pub mod filter;
 mod note;
 mod note_dto;
 mod order;

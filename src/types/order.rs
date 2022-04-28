@@ -27,6 +27,33 @@ pub struct Ordering {
     direction: OrderDirection,
 }
 
+impl Ordering {
+    #[must_use]
+    pub fn new(field: OrderBy, direction: OrderDirection) -> Self {
+        Self { field, direction }
+    }
+
+    #[must_use]
+    pub fn ascending(field: OrderBy) -> Self {
+        Self::new(field, OrderDirection::Ascending)
+    }
+
+    #[must_use]
+    pub fn descending(field: OrderBy) -> Self {
+        Self::new(field, OrderDirection::Descending)
+    }
+
+    #[must_use]
+    pub fn field(&self) -> OrderBy {
+        self.field
+    }
+
+    #[must_use]
+    pub fn direction(&self) -> OrderDirection {
+        self.direction
+    }
+}
+
 impl Default for Ordering {
     fn default() -> Self {
         Self {
@@ -40,7 +67,7 @@ pub type Comparison = Box<dyn Fn(&Note, &Note) -> std::cmp::Ordering>;
 
 impl Ordering {
     #[must_use]
-    pub(crate) fn comparison(self) -> Comparison {
+    pub fn comparison(self) -> Comparison {
         match self.field {
             OrderBy::Title => match self.direction {
                 OrderDirection::Ascending => box |a, b| a.title().cmp(b.title()),

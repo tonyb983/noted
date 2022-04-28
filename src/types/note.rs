@@ -190,6 +190,9 @@ impl Note {
 
     pub fn append_content(&mut self, content: &str) {
         if !content.is_empty() {
+            if !self.content().ends_with(' ') && !content.starts_with(' ') {
+                self.content.push(' ');
+            }
             self.content.push_str(content);
             self.set_updated_now();
             self.dirty = true;
