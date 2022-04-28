@@ -15,6 +15,7 @@ use crate::{
     DatabaseError, Error, Result, ShortId,
 };
 
+/// Implementation of a Database that stores data in a file.
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 pub struct Database {
     notes: Vec<Note>,
@@ -51,6 +52,10 @@ impl Database {
         let mut db = Database { notes, ids };
         db.init()?;
         Ok(db)
+    }
+
+    pub fn load_from_bytes(bytes: &[u8]) -> Result<Self> {
+        Ok(serde_json::from_slice(bytes)?)
     }
 
     pub fn load<P: AsRef<Path>>(path: P) -> Result<Self> {
