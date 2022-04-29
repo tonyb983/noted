@@ -4,7 +4,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-use std::path::Path;
+use std::{collections::HashSet, path::Path};
 
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -12,15 +12,31 @@ use uuid::Uuid;
 use crate::{
     types::{CreateNote, DeleteNote, Note, NoteDto, UpdateNote},
     util::persist::Persistence,
-    DatabaseError, Error, Result, ShortId,
+    DatabaseError, Error, Result, TinyId,
 };
+
+/// Intermediate type that is used to serialize [`Database`] so that the
+/// internal ID-list can be built from the notes as it is constructed.
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
+struct IntermediateDatabase {
+    notes: Vec<Note>,
+}
+
+impl TryFrom<IntermediateDatabase> for Database {
+    type Error = Error;
+
+    fn try_from(value: IntermediateDatabase) -> Result<Self> {
+        Self::from_notes_vec(value.notes)
+    }
+}
 
 /// Implementation of a Database that stores data in a file.
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
+#[serde(try_from = "IntermediateDatabase")]
 pub struct Database {
     notes: Vec<Note>,
-    #[serde(skip)]
-    ids: Vec<ShortId>,
+    // #[serde(skip)]
+    ids: HashSet<TinyId>,
 }
 
 impl Database {
@@ -34,7 +50,7 @@ impl Database {
     pub fn empty() -> Self {
         Database {
             notes: Vec::new(),
-            ids: Vec::new(),
+            ids: HashSet::new(),
         }
     }
 
@@ -126,7 +142,9 @@ impl Database {
     pub fn apply_create(&mut self, create: impl Into<CreateNote>) -> Result<Note> {
         let create = create.into();
         let note = Note::create_for(self, create);
-        self.ids.push(note.id());
+        if !self.ids.insert(note.id()) {
+            return Err(DatabaseError::DuplicateId(note.id()).into());
+        }
         self.notes.push(note.clone());
         Ok(note)
     }
@@ -171,14 +189,14 @@ impl Database {
         }
     }
 
-    pub fn get(&self, id: ShortId) -> Result<&Note> {
+    pub fn get(&self, id: TinyId) -> Result<&Note> {
         self.notes
             .iter()
             .find(|n| n.id() == id)
             .ok_or_else(|| DatabaseError::IdNotFound(id).into())
     }
 
-    pub fn get_clone(&self, id: ShortId) -> Result<Note> {
+    pub fn get_clone(&self, id: TinyId) -> Result<Note> {
         self.notes
             .iter()
             .find(|n| n.id() == id)
@@ -186,7 +204,7 @@ impl Database {
             .ok_or_else(|| DatabaseError::IdNotFound(id).into())
     }
 
-    pub fn get_and_modify(&mut self, id: ShortId, f: impl FnMut(&mut Note)) -> Result<()> {
+    pub fn get_and_modify(&mut self, id: TinyId, f: impl FnMut(&mut Note)) -> Result<()> {
         self.notes
             .iter_mut()
             .find(|n| n.id() == id)
@@ -218,21 +236,21 @@ impl Database {
     }
 
     /// Checks whether the given `id` is currently being used in this [`Database`].
-    pub fn id_in_use(&self, id: ShortId) -> bool {
+    pub fn id_in_use(&self, id: TinyId) -> bool {
         self.notes.iter().any(|n| n.id() == id)
     }
 
     /// Attempts to create a new [`ShortId`] using [`ShortId::random_against`].
-    pub fn create_id(&self) -> Option<ShortId> {
-        ShortId::random_against_db(self)
+    pub fn create_id(&self) -> Result<TinyId> {
+        TinyId::random_against_db(self).map_err(Error::from)
     }
 
     /// Attempts to create a new [`ShortId`] for use in this [`Database`]
     /// until it is successful. This could hypothetically lead to an
     /// infinite loop but it seems unlikely.
-    pub fn create_id_force(&self) -> ShortId {
+    pub fn create_id_force(&self) -> TinyId {
         loop {
-            if let Some(id) = ShortId::random_against_db(self) {
+            if let Ok(id) = TinyId::random_against_db(self) {
                 return id;
             }
         }
@@ -243,23 +261,24 @@ impl Database {
             self.register_ids();
         }
 
-        if self.notes.iter().any(|n| n.id().is_null()) {
-            return Err(DatabaseError::InvalidId.into());
+        if self.ids.len() != self.notes.len() {
+            return Err(DatabaseError::InvalidState(
+                "register_ids could not successfully build id list".to_string(),
+            )
+            .into());
         }
-        let start = self.ids.len();
-        self.ids.sort_unstable();
-        self.ids.dedup();
-        if start != self.ids.len() {
-            return Err(DatabaseError::DuplicateId.into());
+
+        if self.notes.iter().any(|n| !n.id().is_valid()) {
+            return Err(DatabaseError::InvalidId.into());
         }
         Ok(())
     }
 
     fn register_ids(&mut self) {
         self.ids.clear();
-        self.ids = Vec::with_capacity(self.notes.len());
+        self.ids = HashSet::with_capacity(self.notes.len());
         for note in &self.notes {
-            self.ids.push(note.id());
+            self.ids.insert(note.id());
         }
     }
 }
@@ -299,6 +318,8 @@ pub enum UpdateFailurePolicy {
 
 #[cfg(test)]
 mod tests {
+    use crate::Method;
+
     use super::*;
 
     /// Creates a new database with the given number of entries
@@ -354,22 +375,15 @@ mod tests {
         );
     }
 
-    #[allow(clippy::too_many_lines)]
-    // #[test]
+    #[allow(clippy::too_many_lines, clippy::to_string_in_format_args)]
+    #[test]
+    #[ignore]
     fn serde_compare() {
         use std::io::{Read, Write};
         #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
         enum Op {
             Ser,
             De,
-        }
-        #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-        enum Method {
-            Json,
-            Cbor,
-            Bincode,
-            Msgpack,
-            Flexbuffer,
         }
         struct Timing {
             op: Op,
@@ -399,24 +413,13 @@ mod tests {
         struct Size {
             method: Method,
             entries: usize,
-            size: usize,
+            size: u64,
         }
         impl std::fmt::Display for Op {
             fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
                 match self {
-                    Op::Ser => write!(f, "serialize"),
-                    Op::De => write!(f, "deserialize"),
-                }
-            }
-        }
-        impl std::fmt::Display for Method {
-            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-                match self {
-                    Method::Json => write!(f, "JSON"),
-                    Method::Cbor => write!(f, "CBOR"),
-                    Method::Bincode => write!(f, "Bincode"),
-                    Method::Msgpack => write!(f, "Msgpack"),
-                    Method::Flexbuffer => write!(f, "Flexbuffer"),
+                    Op::Ser => write!(f, "write"),
+                    Op::De => write!(f, "read"),
                 }
             }
         }
@@ -454,136 +457,40 @@ mod tests {
         let mut sizes: Vec<Size> = Vec::new();
         let mut bytes: Vec<u8> = Vec::with_capacity(1_000_000);
 
-        // JSON
+        let cargo_dir = std::env::var("CARGO_MANIFEST_DIR")
+            .expect("Unable to get the value of CARGO_MANIFEST_DIR");
+        let save_dir = std::path::Path::new(&cargo_dir)
+            .to_path_buf()
+            .join("data")
+            .join("testing");
+        assert!(save_dir.exists(), "./data/testing does not exist!");
         for &(i, db) in &dbs {
-            let filename = format!("json_db_{}.json", i);
-            // Serialize
-            println!("Json {} - serializing", i);
-            let now = std::time::Instant::now();
-            db.save_dev_with(filename.as_str(), |w, d| {
-                serde_json::to_writer(w, d).map_err(Error::from)
-            });
-            let elapsed = now.elapsed();
-            timings.push(Timing::ser(Method::Json, i, elapsed));
+            for method in Method::working_methods() {
+                let file_name = format!("test-{}-{}.db", method, i);
+                let save_path = save_dir.clone().join(&file_name);
+                let now = std::time::Instant::now();
+                let result = Persistence::save_to_file(&db, &save_path, method);
+                let elapsed = now.elapsed();
+                assert!(result.is_ok(), "Failed to save db-{} using {}", i, method);
+                timings.push(Timing::ser(method, i, elapsed));
 
-            // Deserialize
-            println!("Json {} - deserializing", i);
-            let now = std::time::Instant::now();
-            let loaded = Database::load_dev_with(filename.as_str(), |r| {
-                serde_json::from_reader(r).map_err(Error::from)
-            })
-            .expect("Failure during json deserialization");
-            let elapsed = now.elapsed();
-            timings.push(Timing::de(Method::Json, i, elapsed));
+                let now = std::time::Instant::now();
+                let result: Result<Database> = Persistence::load_from_file(&save_path, method);
+                let elapsed = now.elapsed();
+                assert!(result.is_ok(), "Failed to load db-{} using {}", i, method);
+                timings.push(Timing::de(method, i, elapsed));
+                let reversed = result.unwrap();
+                assert_eq!(db.len(), reversed.len());
 
-            // Size
-            println!("Json {} - getting byte count", i);
-            bytes.clear();
-            serde_json::to_writer(&mut bytes, &db).expect("Unable to get bytes from json");
-            sizes.push(Size {
-                method: Method::Json,
-                entries: i,
-                size: bytes.len(),
-            });
-        }
-
-        // CBOR
-        for &(i, db) in &dbs {
-            let filename = format!("cbor_db_{}.cbor", i);
-            // Ser
-            println!("Cbor {} - serializing", i);
-            let now = std::time::Instant::now();
-            db.save_dev_with(filename.as_str(), |w, d| {
-                ciborium::ser::into_writer(d, w).map_err(Error::from)
-            });
-            let elapsed = now.elapsed();
-            timings.push(Timing::ser(Method::Cbor, i, elapsed));
-
-            // De
-            println!("Cbor {} - deserializing", i);
-            let now = std::time::Instant::now();
-            let loaded = Database::load_dev_with(filename.as_str(), |r| {
-                ciborium::de::from_reader(r).map_err(Error::from)
-            })
-            .expect("Failure during cbor deserialization");
-            let elapsed = now.elapsed();
-            timings.push(Timing::de(Method::Cbor, i, elapsed));
-
-            // Size
-            println!("Cbor {} - getting byte count", i);
-            bytes.clear();
-            ciborium::ser::into_writer(db, &mut bytes).expect("Unable to write cbor as bytes");
-            sizes.push(Size {
-                method: Method::Cbor,
-                entries: i,
-                size: bytes.len(),
-            });
-        }
-
-        // Bincode
-        // for &(i, db) in &dbs {
-        //     let filename = format!("bincode_db_{}.bc", i);
-        //     // Ser
-        //     println!("Bincode {} - serializing", i);
-        //     let now = std::time::Instant::now();
-        //     db.save_dev_with(filename.as_str(), |w, d| {
-        //         bincode::serialize_into(w, d).map_err(Error::from)
-        //     });
-        //     let elapsed = now.elapsed();
-        //     timings.push(Timing::ser(Method::Bincode, i, elapsed));
-
-        //     // De
-        //     println!("Bincode {} - deserializing", i);
-        //     let now = std::time::Instant::now();
-        //     let loaded = Database::load_dev_with(filename.as_str(), |r| {
-        //         bincode::deserialize_from(r).map_err(Error::from)
-        //     })
-        //     .expect("Failure during bincode deserialization");
-        //     let elapsed = now.elapsed();
-        //     timings.push(Timing::de(Method::Bincode, i, elapsed));
-
-        //     // Size
-        //     println!("Bincode {} - getting byte count", i);
-        //     bytes.clear();
-        //     bincode::serialize_into(&mut bytes, db).expect("Unable to save bincode to bytes");
-        //     sizes.push(Size {
-        //         method: Method::Bincode,
-        //         entries: i,
-        //         size: bytes.len(),
-        //     });
-        // }
-
-        // MsgPack
-        for &(i, db) in &dbs {
-            let filename = format!("msgpack_db_{}.rmp", i);
-            // Ser
-            println!("MsgPack {} - serializing", i);
-            let now = std::time::Instant::now();
-            db.save_dev_with(filename.as_str(), |mut w, d| {
-                rmp_serde::encode::write(&mut w, d).map_err(Error::from)
-            });
-            let elapsed = now.elapsed();
-            timings.push(Timing::ser(Method::Msgpack, i, elapsed));
-
-            // De
-            println!("MsgPack {} - deserializing", i);
-            let now = std::time::Instant::now();
-            let loaded = Database::load_dev_with(filename.as_str(), |r| {
-                rmp_serde::from_read(r).map_err(Error::from)
-            })
-            .expect("Failure during msgpack deserialization");
-            let elapsed = now.elapsed();
-            timings.push(Timing::de(Method::Msgpack, i, elapsed));
-
-            // Size
-            println!("MsgPack {} - getting byte count", i);
-            bytes.clear();
-            bincode::serialize_into(&mut bytes, db).expect("Unable to save msgpack to bytes");
-            sizes.push(Size {
-                method: Method::Msgpack,
-                entries: i,
-                size: bytes.len(),
-            });
+                let file = std::fs::File::open(&save_path)
+                    .unwrap_or_else(|_| panic!("Unable to open file {}", save_path.display()));
+                let size = file.metadata().expect("Unable to get file metadata").len();
+                sizes.push(Size {
+                    method,
+                    entries: i,
+                    size,
+                });
+            }
         }
 
         // Order Data
@@ -593,12 +500,41 @@ mod tests {
         // Print Results
         println!("Comparison completed.");
         println!("Timings:");
+        println!(
+            "|{:^10}|{:^10}|{:^10}|{:^10}|",
+            "Method", "Entries", "Op", "Time"
+        );
+        println!(
+            "|{:^10}|{:^10}|{:^10}|{:^10}|",
+            "-".repeat(10),
+            "-".repeat(10),
+            "-".repeat(10),
+            "-".repeat(10)
+        );
         for timing in &timings {
-            println!("\t{}", timing);
+            println!(
+                "|{:<10}|{:^10}|{:^10}|{:>10?}|",
+                timing.method.to_string(),
+                timing.entries,
+                timing.op.to_string(),
+                timing.elapsed
+            );
         }
         println!("Sizes:");
+        println!("|{:^10}|{:^10}|{:^10}|", "Method", "Entries", "Bytes");
+        println!(
+            "|{:^10}|{:^10}|{:^10}|",
+            "-".repeat(10),
+            "-".repeat(10),
+            "-".repeat(10)
+        );
         for size in &sizes {
-            println!("\t{}", size);
+            println!(
+                "|{:<10}|{:^10}|{:>10}|",
+                size.method.to_string(),
+                size.entries,
+                size.size
+            );
         }
     }
 }

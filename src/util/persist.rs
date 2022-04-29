@@ -17,7 +17,7 @@ pub enum Method {
 }
 
 impl Method {
-    pub(self) fn all_methods() -> impl Iterator<Item = Self> {
+    pub(crate) fn all_methods() -> impl Iterator<Item = Self> {
         [
             Method::Json,
             Method::Cbor,
@@ -28,6 +28,12 @@ impl Method {
         ]
         .iter()
         .copied()
+    }
+
+    pub(crate) fn working_methods() -> impl Iterator<Item = Self> {
+        [Method::Json, Method::Cbor, Method::MsgPack]
+            .iter()
+            .copied()
     }
 }
 
@@ -276,6 +282,8 @@ impl Persistence {
         Self::save_to_file(data, path, Self::DEFAULT_METHOD)
     }
 
+    /// TODO: Checkout [this serde docs page](https://serde.rs/transcode.html) to simplify this.
+    ///
     /// Converts a file from one serialization format to another. Unfortunately there is
     /// no way to check whether a file was actually serialized with the given format in
     /// the first place, so a backup of the file is made before the conversion takes place.
@@ -296,6 +304,8 @@ impl Persistence {
         Ok(())
     }
 
+    /// TODO: Checkout [this serde docs page](https://serde.rs/transcode.html) to simplify this.
+    ///
     /// Converts a file from one serialization format to another. Unfortunately there is
     /// no way to check whether a file was actually serialized with the given format in
     /// the first place, so a backup of the file is made before the conversion takes place.

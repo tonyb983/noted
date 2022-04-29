@@ -15,12 +15,12 @@ use uuid::Uuid;
 
 use crate::{
     types::{CreateNote, DeleteNote, UpdateNote},
-    ShortId,
+    TinyId,
 };
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Note {
-    id: ShortId,
+    id: TinyId,
     title: String,
     content: String,
     tags: Vec<String>,
@@ -35,7 +35,7 @@ pub struct Note {
 impl Note {
     #[must_use]
     pub fn existing(
-        id: ShortId,
+        id: TinyId,
         title: String,
         content: String,
         tags: Vec<String>,
@@ -58,7 +58,7 @@ impl Note {
     pub fn create(dto: impl Into<CreateNote>) -> Self {
         let (title, content, tags) = dto.into().into_parts();
         Self {
-            id: ShortId::random(),
+            id: TinyId::random(),
             title: title.unwrap_or_default(),
             content: content.unwrap_or_default(),
             tags,
@@ -140,7 +140,7 @@ impl Note {
     }
 
     #[must_use]
-    pub fn id(&self) -> ShortId {
+    pub fn id(&self) -> TinyId {
         self.id
     }
 
@@ -308,7 +308,7 @@ impl Note {
     }
 
     pub(crate) fn make_invalid(&mut self) {
-        self.id = ShortId::null();
+        self.id = TinyId::null();
         self.dirty = false;
         self.pending_delete = false;
         self.title = String::new();

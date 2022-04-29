@@ -8,7 +8,7 @@ use std::{array::TryFromSliceError, path::PathBuf};
 
 use uuid::Uuid;
 
-use crate::{ShortId, ShortIdError};
+use crate::{TinyId, TinyIdError};
 
 #[derive(Debug)]
 pub enum Error {
@@ -21,7 +21,7 @@ pub enum Error {
     Database(DatabaseError),
     Unknown(String),
     NotImplemented(String),
-    ShortId(ShortIdError),
+    TinyId(TinyIdError),
 }
 
 impl Error {
@@ -83,7 +83,7 @@ impl std::fmt::Display for Error {
             Error::Unknown(s) => write!(f, "Unknown error: {}", s),
             Error::SerDe(s) => write!(f, "De/Serialization error occurred: {}", s),
             Error::NotImplemented(s) => write!(f, "Not implemented: {}", s),
-            Error::ShortId(e) => e.fmt(f),
+            Error::TinyId(e) => e.fmt(f),
         }
     }
 }
@@ -193,18 +193,19 @@ impl<'s> From<&'s str> for Error {
         Self::Unknown(err.to_string())
     }
 }
-impl From<ShortIdError> for Error {
-    fn from(err: ShortIdError) -> Self {
-        Self::ShortId(err)
+impl From<TinyIdError> for Error {
+    fn from(err: TinyIdError) -> Self {
+        Self::TinyId(err)
     }
 }
 
 #[derive(Debug)]
 pub enum DatabaseError {
     DataFileNotFound(PathBuf),
-    IdNotFound(ShortId),
+    IdNotFound(TinyId),
     PolicyFailure(String),
-    DuplicateId,
+    DuplicateId(TinyId),
+    InvalidState(String),
     InvalidId,
 }
 
@@ -213,11 +214,12 @@ impl std::fmt::Display for DatabaseError {
         match self {
             DatabaseError::IdNotFound(id) => write!(f, "Note with id {} not found", id),
             DatabaseError::PolicyFailure(s) => write!(f, "Policy failure: {}", s),
-            DatabaseError::DuplicateId => write!(f, "Duplicate IDs found in Database"),
+            DatabaseError::DuplicateId(id) => write!(f, "Duplicate ID for Database: {}", id),
             DatabaseError::InvalidId => write!(f, "Invalid ID found in Database"),
             DatabaseError::DataFileNotFound(pb) => {
                 write!(f, "Data file not found at path '{}'", pb.display())
             }
+            DatabaseError::InvalidState(s) => write!(f, "Invalid Database state: {}", s),
         }
     }
 }

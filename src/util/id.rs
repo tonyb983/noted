@@ -15,38 +15,40 @@ const NULL_CHAR: u8 = b'\0';
 const NULL_INSTANCE: [u8; 8] = [NULL_CHAR; 8];
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum ShortIdError {
+pub enum TinyIdError {
     InvalidLength,
     InvalidCharacters,
     Conversion(String),
+    GenerationFailure,
 }
 
-impl std::fmt::Display for ShortIdError {
+impl std::fmt::Display for TinyIdError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            ShortIdError::InvalidLength => write!(f, "Invalid length"),
-            ShortIdError::InvalidCharacters => write!(f, "Invalid characters"),
-            ShortIdError::Conversion(s) => write!(f, "Conversion error: {}", s),
+            TinyIdError::InvalidLength => write!(f, "Invalid length"),
+            TinyIdError::InvalidCharacters => write!(f, "Invalid characters"),
+            TinyIdError::Conversion(s) => write!(f, "Conversion error: {}", s),
+            TinyIdError::GenerationFailure => write!(f, "TinyId generation failed"),
         }
     }
 }
 
-impl From<std::array::TryFromSliceError> for ShortIdError {
+impl From<std::array::TryFromSliceError> for TinyIdError {
     fn from(err: std::array::TryFromSliceError) -> Self {
         Self::Conversion(err.to_string())
     }
 }
 
-impl std::error::Error for ShortIdError {}
+impl std::error::Error for TinyIdError {}
 
 #[derive(
     Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Deserialize, serde::Serialize,
 )]
-pub struct ShortId {
+pub struct TinyId {
     data: [u8; 8],
 }
 
-impl ShortId {
+impl TinyId {
     /// Create an instance of the `null` [`ShortId`].
     #[must_use]
     pub fn null() -> Self {
@@ -58,39 +60,47 @@ impl ShortId {
     /// Create a new random [`ShortId`].
     #[must_use]
     pub fn random() -> Self {
-        Self::random_oor()
+        Self::random_fastrand2()
     }
 
     /// Attempts to create a new [`ShortId`] for use in the given [`Database`](crate::db::Database).
     /// It will attempt to create an ID that is not in use a certain number of times
     /// (currently arbitrarily set to 100), and return [`Option::None`] if this fails.
+    ///
+    /// ## Errors
+    /// - [`TinyIdError::GenerationFailure`] - If a unique ID cannot be generated
     #[must_use]
-    pub fn random_against_db(db: &crate::db::Database) -> Option<Self> {
+    pub fn random_against_db(db: &crate::db::Database) -> std::result::Result<Self, TinyIdError> {
         const MAX_ATTEMPTS: usize = 100;
         for _ in 0..MAX_ATTEMPTS {
             let id = Self::random();
             if !db.id_in_use(id) {
-                return Some(id);
+                return Ok(id);
             }
         }
 
-        None
+        Err(TinyIdError::GenerationFailure)
     }
 
     /// Attempts to create a new [`ShortId`] that is not contained within the given [`HashSet`](std::collections::HashSet).
     /// It will attempt to create an ID that is not in use a certain number of times
     /// (currently arbitrarily set to 100), and return [`Option::None`] if this fails.
+    ///
+    /// ## Errors
+    /// - [`TinyIdError::GenerationFailure`] - If a unique ID cannot be generated
     #[must_use]
-    pub fn random_against_list(list: &std::collections::HashSet<Self>) -> Option<Self> {
+    pub fn random_against_list(
+        list: &std::collections::HashSet<Self>,
+    ) -> std::result::Result<Self, TinyIdError> {
         const MAX_ATTEMPTS: usize = 100;
         for _ in 0..MAX_ATTEMPTS {
             let id = Self::random();
             if !list.contains(&id) {
-                return Some(id);
+                return Ok(id);
             }
         }
 
-        None
+        Err(TinyIdError::GenerationFailure)
     }
 
     /// Checks whether this [`ShortId`] is null or has any invalid bytes.
@@ -104,15 +114,15 @@ impl ShortId {
         self.data == NULL_INSTANCE
     }
 
-    fn from_str(s: &str) -> Result<Self, ShortIdError> {
+    fn from_str(s: &str) -> std::result::Result<Self, TinyIdError> {
         if s.len() != 8 {
-            return Err(ShortIdError::InvalidLength);
+            return Err(TinyIdError::InvalidLength);
         }
 
         let mut data = [NULL_CHAR; 8];
         for (i, ch) in s.bytes().enumerate() {
             if !LETTERS.contains(&ch) {
-                return Err(ShortIdError::InvalidCharacters);
+                return Err(TinyIdError::InvalidCharacters);
             }
             data[i] = ch;
         }
@@ -141,7 +151,7 @@ impl ShortId {
     /// ## Errors
     /// - [`ShortIdError::InvalidLength`] if the input is not 8 bytes long.
     /// - [`ShortIdError::InvalidCharacters`] if the input contains invalid chars/bytes.
-    pub fn from_u64(n: u64) -> Result<Self, ShortIdError> {
+    pub fn from_u64(n: u64) -> Result<Self, TinyIdError> {
         let bytes: [u8; 8] = n.to_be_bytes();
         Self::from_bytes(bytes)
     }
@@ -164,12 +174,12 @@ impl ShortId {
     ///
     /// ## Errors
     /// - [`ShortIdError::InvalidCharacters`] if the input contains invalid chars/bytes.
-    pub fn from_bytes(bytes: [u8; 8]) -> Result<Self, ShortIdError> {
+    pub fn from_bytes(bytes: [u8; 8]) -> Result<Self, TinyIdError> {
         let id = Self { data: bytes };
         if id.is_valid() {
             Ok(id)
         } else {
-            Err(ShortIdError::InvalidCharacters)
+            Err(TinyIdError::InvalidCharacters)
         }
     }
 
@@ -182,7 +192,7 @@ impl ShortId {
 }
 
 /// RNG Type Comparison
-impl ShortId {
+impl TinyId {
     /// Create a new random [`ShortId`].
     ///
     /// This method calls [`fastrand::u8`] 8 times
@@ -240,6 +250,30 @@ impl ShortId {
     }
 
     #[must_use]
+    pub(crate) fn random_nanorand3() -> Self {
+        use nanorand::Rng;
+        let mut rng = nanorand::tls_rng();
+        let mut data = rng.rand();
+        for ch in &mut data {
+            *ch = LETTERS[*ch as usize % LETTER_COUNT];
+        }
+
+        Self { data }
+    }
+
+    #[must_use]
+    pub(crate) fn random_nanorand4() -> Self {
+        use nanorand::Rng;
+        let mut rng = nanorand::tls_rng();
+        let mut data: [u8; 8] = rng.generate::<usize>().to_be_bytes();
+        for ch in &mut data {
+            *ch = LETTERS[*ch as usize % LETTER_COUNT];
+        }
+
+        Self { data }
+    }
+
+    #[must_use]
     pub(crate) fn random_rand1() -> Self {
         use rand::distributions::{Alphanumeric, Distribution, Uniform};
         let range = Uniform::new(0, LETTER_COUNT);
@@ -257,6 +291,20 @@ impl ShortId {
         Self { data }
     }
 
+    #[must_use]
+    pub(crate) fn random_rand2() -> Self {
+        use rand::Rng;
+        let mut rng = rand::thread_rng();
+        let mut data: [u8; 8] = rng.gen::<usize>().to_be_bytes();
+        for b in &mut data {
+            *b = LETTERS[*b as usize % LETTER_COUNT];
+        }
+
+        Self { data }
+    }
+
+    /// This method is pretty useless since it relies on having a random seed
+    /// to create a new [`oorandom::Rand32`] or [`oorandom::Rand64`] instance.
     #[allow(clippy::cast_possible_truncation)]
     #[must_use]
     pub(crate) fn random_oor() -> Self {
@@ -271,28 +319,28 @@ impl ShortId {
     }
 }
 
-impl TryFrom<[u8; 8]> for ShortId {
-    type Error = ShortIdError;
+impl TryFrom<[u8; 8]> for TinyId {
+    type Error = TinyIdError;
 
     fn try_from(value: [u8; 8]) -> std::result::Result<Self, Self::Error> {
         if value.iter().any(|ch| !LETTERS.contains(ch)) {
-            Err(ShortIdError::InvalidCharacters)
+            Err(TinyIdError::InvalidCharacters)
         } else {
             Ok(Self { data: value })
         }
     }
 }
 
-impl<'a> TryFrom<&'a [u8]> for ShortId {
-    type Error = ShortIdError;
+impl<'a> TryFrom<&'a [u8]> for TinyId {
+    type Error = TinyIdError;
 
     fn try_from(value: &'a [u8]) -> std::result::Result<Self, Self::Error> {
         let data = value.to_vec();
         if data.len() != 8 {
-            return Err(ShortIdError::InvalidLength);
+            return Err(TinyIdError::InvalidLength);
         }
         if data.iter().any(|ch| !LETTERS.contains(ch)) {
-            return Err(ShortIdError::InvalidCharacters);
+            return Err(TinyIdError::InvalidCharacters);
         }
 
         let data = <[u8; 8]>::try_from(data.as_slice())?;
@@ -301,14 +349,14 @@ impl<'a> TryFrom<&'a [u8]> for ShortId {
     }
 }
 
-impl From<u64> for ShortId {
+impl From<u64> for TinyId {
     fn from(n: u64) -> Self {
         let mut data: [u8; 8] = n.to_be_bytes();
         Self { data }
     }
 }
 
-impl FromIterator<u8> for ShortId {
+impl FromIterator<u8> for TinyId {
     fn from_iter<I: IntoIterator<Item = u8>>(iter: I) -> Self {
         let mut data: [u8; 8] = [NULL_CHAR; 8];
         for (i, ch) in iter.into_iter().enumerate() {
@@ -320,21 +368,27 @@ impl FromIterator<u8> for ShortId {
     }
 }
 
-impl std::str::FromStr for ShortId {
-    type Err = ShortIdError;
+impl std::str::FromStr for TinyId {
+    type Err = TinyIdError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         Self::from_str(s)
     }
 }
 
-impl std::fmt::Display for ShortId {
+impl std::fmt::Display for TinyId {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         for ch in &self.data {
             write!(f, "{}", *ch as char)?;
         }
         Ok(())
     }
+}
+
+fn names_random() -> String {
+    names::Generator::with_naming(names::Name::Numbered)
+        .next()
+        .unwrap()
 }
 
 #[cfg(test)]
@@ -345,19 +399,19 @@ mod tests {
 
     #[test]
     fn basic_usage() {
-        let id = ShortId::random();
+        let id = TinyId::random();
         println!("Created id {} ({:?})", id, id);
         assert!(id.is_valid());
         assert!(!id.is_null());
         let num = id.to_u64();
-        let back = ShortId::from_u64(num).expect("Unable to convert back to u64");
+        let back = TinyId::from_u64(num).expect("Unable to convert back to u64");
         assert_eq!(id, back);
         assert_eq!(num, back.to_u64());
         let bytes = id.to_bytes();
-        let back = ShortId::from_bytes(bytes).expect("Unable to convert back to bytes");
+        let back = TinyId::from_bytes(bytes).expect("Unable to convert back to bytes");
         assert_eq!(id, back);
         assert_eq!(bytes, back.to_bytes());
-        let bad_id = ShortId::null();
+        let bad_id = TinyId::null();
         assert!(!bad_id.is_valid());
         assert!(bad_id.is_null());
     }
@@ -367,7 +421,7 @@ mod tests {
         use std::collections::HashSet;
         let mut ids = HashSet::new();
         for _ in 0..1_000_000 {
-            let id = ShortId::random();
+            let id = TinyId::random();
             assert!(ids.insert(id));
         }
     }
@@ -392,12 +446,12 @@ mod tests {
     fn ignored_shortid_runs_until_collision() {
         use std::collections::HashSet;
         let mut ids = HashSet::new();
-        let mut new_id = ShortId::random();
+        let mut new_id = TinyId::random();
         let mut counter: usize = 0;
         let mut failures: usize = 0;
         while failures < 2 {
             while ids.insert(new_id) {
-                new_id = ShortId::random();
+                new_id = TinyId::random();
                 counter += 1;
             }
             failures += 1;
@@ -410,7 +464,7 @@ mod tests {
     /// - [`uuid::Uuid::new_v4`]
     /// - [`fastrand::u64`]
     /// - [`fastrand::u8`] x8
-    /// Results are ...not great...
+    /// Results are better now using the second fastrand implementation.
     #[allow(clippy::cast_possible_truncation, clippy::similar_names)]
     #[test]
     #[ignore]
@@ -418,7 +472,7 @@ mod tests {
         const ITERS: usize = 1_000_000;
         let now = std::time::Instant::now();
         for _ in 0..ITERS {
-            let _id = ShortId::random();
+            let _id = TinyId::random();
         }
         let sid_elapsed = now.elapsed();
         let sid_average = sid_elapsed / ITERS as u32;
@@ -451,6 +505,13 @@ mod tests {
         let uuid_elapsed = now.elapsed();
         let uuid_average = uuid_elapsed / ITERS as u32;
 
+        let now = std::time::Instant::now();
+        for _ in 0..ITERS {
+            let _name = names_random();
+        }
+        let names_elapsed = now.elapsed();
+        let names_average = names_elapsed / ITERS as u32;
+
         println!("Results after {} iterations:", ITERS);
         println!();
         println!(
@@ -469,8 +530,15 @@ mod tests {
             "    Uuid::new_v4: {:>10?} ({:>10?} ave.)",
             uuid_elapsed, uuid_average
         );
+        println!(
+            "     names crate: {:>10?} ({:>10?} ave.)",
+            names_elapsed, names_average
+        );
     }
 
+    /// Test comparing the multiple different RNG methods. Ignored by default
+    /// because it doesnt really test anything, it is just useful to see
+    /// how long each method takes to generate the id.
     #[allow(clippy::cast_possible_truncation, clippy::similar_names)]
     #[test]
     #[ignore]
@@ -479,45 +547,73 @@ mod tests {
 
         let now = std::time::Instant::now();
         for _ in 0..ITERS {
-            let _id = ShortId::random_fastrand();
+            let _id = TinyId::random_fastrand();
         }
         let fr_elapsed = now.elapsed();
         let fr_average = fr_elapsed / ITERS as u32;
 
         let now = std::time::Instant::now();
         for _ in 0..ITERS {
-            let _id = ShortId::random_fastrand2();
+            let _id = TinyId::random_fastrand2();
         }
         let fr2_elapsed = now.elapsed();
         let fr2_average = fr2_elapsed / ITERS as u32;
 
         let now = std::time::Instant::now();
         for _ in 0..ITERS {
-            let _id = ShortId::random_rand1();
+            let _id = TinyId::random_rand1();
         }
         let rand1_elapsed = now.elapsed();
         let rand1_average = rand1_elapsed / ITERS as u32;
 
         let now = std::time::Instant::now();
         for _ in 0..ITERS {
-            let _id = ShortId::random_nanorand1();
+            let _id = TinyId::random_rand2();
+        }
+        let rand2_elapsed = now.elapsed();
+        let rand2_average = rand2_elapsed / ITERS as u32;
+
+        let now = std::time::Instant::now();
+        for _ in 0..ITERS {
+            let _id = TinyId::random_nanorand1();
         }
         let nano1_elapsed = now.elapsed();
         let nano1_average = nano1_elapsed / ITERS as u32;
 
         let now = std::time::Instant::now();
         for _ in 0..ITERS {
-            let _id = ShortId::random_nanorand2();
+            let _id = TinyId::random_nanorand2();
         }
         let nano2_elapsed = now.elapsed();
         let nano2_average = nano2_elapsed / ITERS as u32;
 
         let now = std::time::Instant::now();
         for _ in 0..ITERS {
-            let _id = ShortId::random_oor();
+            let _id = TinyId::random_nanorand3();
+        }
+        let nano3_elapsed = now.elapsed();
+        let nano3_average = nano3_elapsed / ITERS as u32;
+
+        let now = std::time::Instant::now();
+        for _ in 0..ITERS {
+            let _id = TinyId::random_nanorand4();
+        }
+        let nano4_elapsed = now.elapsed();
+        let nano4_average = nano4_elapsed / ITERS as u32;
+
+        let now = std::time::Instant::now();
+        for _ in 0..ITERS {
+            let _id = TinyId::random_oor();
         }
         let oor_elapsed = now.elapsed();
         let oor_average = oor_elapsed / ITERS as u32;
+
+        let now = std::time::Instant::now();
+        for _ in 0..ITERS {
+            let _id = names_random();
+        }
+        let names_elapsed = now.elapsed();
+        let names_average = names_elapsed / ITERS as u32;
 
         println!("Results after {} iterations:", ITERS);
         println!();
@@ -531,6 +627,10 @@ mod tests {
             rand1_elapsed, rand1_average
         );
         println!(
+            "    rand 2: {:>10?} ({:>10?} ave.)",
+            rand2_elapsed, rand2_average
+        );
+        println!(
             "nanorand 1: {:>10?} ({:>10?} ave.)",
             nano1_elapsed, nano1_average
         );
@@ -539,26 +639,42 @@ mod tests {
             nano2_elapsed, nano2_average
         );
         println!(
+            "nanorand 3: {:>10?} ({:>10?} ave.)",
+            nano3_elapsed, nano3_average
+        );
+        println!(
+            "nanorand 4: {:>10?} ({:>10?} ave.)",
+            nano4_elapsed, nano4_average
+        );
+        println!(
             "  oorandom: {:>10?} ({:>10?} ave.)",
             oor_elapsed, oor_average
         );
+        println!(
+            "     names: {:>10?} ({:>10?} ave.)",
+            names_elapsed, names_average
+        );
     }
 
+    /// Same as the previous test, `rng_compare`, but this time the results
+    /// are stored, and after the timing is captured, each ID is checked to
+    /// confirm validity. I found a bug in the `random_nano2` method using this.
     #[allow(
         clippy::cast_possible_truncation,
         clippy::similar_names,
-        clippy::needless_range_loop
+        clippy::needless_range_loop,
+        clippy::too_many_lines
     )]
     #[test]
     #[ignore]
     fn rng_compare_validated() {
         const ITERS: usize = 1_000_000;
-        let mut generated = box [ShortId::null(); ITERS];
+        let mut generated = box [TinyId::null(); ITERS];
 
-        generated = box [ShortId::null(); ITERS];
+        generated = box [TinyId::null(); ITERS];
         let now = std::time::Instant::now();
         for i in 0..ITERS {
-            generated[i] = ShortId::random_fastrand();
+            generated[i] = TinyId::random_fastrand();
         }
         let fr_elapsed = now.elapsed();
         let fr_average = fr_elapsed / ITERS as u32;
@@ -567,10 +683,10 @@ mod tests {
             "fastrand1 failed validation!"
         );
 
-        generated = box [ShortId::null(); ITERS];
+        generated = box [TinyId::null(); ITERS];
         let now = std::time::Instant::now();
         for i in 0..ITERS {
-            generated[i] = ShortId::random_fastrand2();
+            generated[i] = TinyId::random_fastrand2();
         }
         let fr2_elapsed = now.elapsed();
         let fr2_average = fr2_elapsed / ITERS as u32;
@@ -579,10 +695,10 @@ mod tests {
             "fastrand2 failed validation!"
         );
 
-        generated = box [ShortId::null(); ITERS];
+        generated = box [TinyId::null(); ITERS];
         let now = std::time::Instant::now();
         for i in 0..ITERS {
-            generated[i] = ShortId::random_rand1();
+            generated[i] = TinyId::random_rand1();
         }
         let rand1_elapsed = now.elapsed();
         let rand1_average = rand1_elapsed / ITERS as u32;
@@ -591,10 +707,22 @@ mod tests {
             "rand1 failed validation!"
         );
 
-        generated = box [ShortId::null(); ITERS];
+        generated = box [TinyId::null(); ITERS];
         let now = std::time::Instant::now();
         for i in 0..ITERS {
-            generated[i] = ShortId::random_nanorand1();
+            generated[i] = TinyId::random_rand2();
+        }
+        let rand2_elapsed = now.elapsed();
+        let rand2_average = rand2_elapsed / ITERS as u32;
+        assert!(
+            generated.iter().all(|id| id.is_valid()),
+            "rand2 failed validation!"
+        );
+
+        generated = box [TinyId::null(); ITERS];
+        let now = std::time::Instant::now();
+        for i in 0..ITERS {
+            generated[i] = TinyId::random_nanorand1();
         }
         let nano1_elapsed = now.elapsed();
         let nano1_average = nano1_elapsed / ITERS as u32;
@@ -603,10 +731,10 @@ mod tests {
             "nanorand1 failed validation!"
         );
 
-        generated = box [ShortId::null(); ITERS];
+        generated = box [TinyId::null(); ITERS];
         let now = std::time::Instant::now();
         for i in 0..ITERS {
-            generated[i] = ShortId::random_nanorand2();
+            generated[i] = TinyId::random_nanorand2();
         }
         let nano2_elapsed = now.elapsed();
         let nano2_average = nano2_elapsed / ITERS as u32;
@@ -615,10 +743,34 @@ mod tests {
             "nanorand2 failed validation!"
         );
 
-        generated = box [ShortId::null(); ITERS];
+        generated = box [TinyId::null(); ITERS];
         let now = std::time::Instant::now();
         for i in 0..ITERS {
-            generated[i] = ShortId::random_oor();
+            generated[i] = TinyId::random_nanorand3();
+        }
+        let nano3_elapsed = now.elapsed();
+        let nano3_average = nano3_elapsed / ITERS as u32;
+        assert!(
+            generated.iter().all(|id| id.is_valid()),
+            "nanorand3 failed validation!"
+        );
+
+        generated = box [TinyId::null(); ITERS];
+        let now = std::time::Instant::now();
+        for i in 0..ITERS {
+            generated[i] = TinyId::random_nanorand4();
+        }
+        let nano4_elapsed = now.elapsed();
+        let nano4_average = nano4_elapsed / ITERS as u32;
+        assert!(
+            generated.iter().all(|id| id.is_valid()),
+            "nanorand4 failed validation!"
+        );
+
+        generated = box [TinyId::null(); ITERS];
+        let now = std::time::Instant::now();
+        for i in 0..ITERS {
+            generated[i] = TinyId::random_oor();
         }
         let oor_elapsed = now.elapsed();
         let oor_average = oor_elapsed / ITERS as u32;
@@ -639,12 +791,24 @@ mod tests {
             rand1_elapsed, rand1_average
         );
         println!(
+            "    rand 2: {:>10?} ({:>10?} ave.)",
+            rand2_elapsed, rand2_average
+        );
+        println!(
             "nanorand 1: {:>10?} ({:>10?} ave.)",
             nano1_elapsed, nano1_average
         );
         println!(
             "nanorand 2: {:>10?} ({:>10?} ave.)",
             nano2_elapsed, nano2_average
+        );
+        println!(
+            "nanorand 3: {:>10?} ({:>10?} ave.)",
+            nano3_elapsed, nano3_average
+        );
+        println!(
+            "nanorand 4: {:>10?} ({:>10?} ave.)",
+            nano4_elapsed, nano4_average
         );
         println!(
             "  oorandom: {:>10?} ({:>10?} ave.)",

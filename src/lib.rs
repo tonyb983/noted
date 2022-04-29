@@ -58,7 +58,7 @@ pub mod util;
 
 pub use types::{DatabaseError, Error, Result};
 pub use util::{
-    id::{ShortId, ShortIdError},
+    id::{TinyId, TinyIdError},
     persist::{Method, Persistence},
 };
 

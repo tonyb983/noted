@@ -138,11 +138,11 @@ mod create {
 mod update {
     use serde::{Deserialize, Serialize};
 
-    use crate::ShortId;
+    use crate::TinyId;
 
     #[derive(Debug, Clone, Serialize, Deserialize)]
     pub struct UpdateNote {
-        pub id: ShortId,
+        pub id: TinyId,
         pub title: Option<String>,
         pub content: Option<String>,
         pub tags: Option<Vec<String>>,
@@ -150,7 +150,7 @@ mod update {
 
     impl UpdateNote {
         #[must_use]
-        pub fn empty(id: ShortId) -> Self {
+        pub fn empty(id: TinyId) -> Self {
             Self {
                 id,
                 title: None,
@@ -161,7 +161,7 @@ mod update {
 
         #[must_use]
         pub fn new(
-            id: ShortId,
+            id: TinyId,
             title: Option<String>,
             content: Option<String>,
             tags: Option<Vec<String>>,
@@ -203,7 +203,7 @@ mod update {
         }
 
         #[must_use]
-        pub fn id(&self) -> &ShortId {
+        pub fn id(&self) -> &TinyId {
             &self.id
         }
 
@@ -223,49 +223,49 @@ mod update {
         }
 
         #[must_use]
-        pub fn into_parts(self) -> (ShortId, Option<String>, Option<String>, Option<Vec<String>>) {
+        pub fn into_parts(self) -> (TinyId, Option<String>, Option<String>, Option<Vec<String>>) {
             (self.id, self.title, self.content, self.tags)
         }
     }
 
-    impl From<(ShortId, String, String, Vec<String>)> for UpdateNote {
-        fn from(parts: (ShortId, String, String, Vec<String>)) -> Self {
+    impl From<(TinyId, String, String, Vec<String>)> for UpdateNote {
+        fn from(parts: (TinyId, String, String, Vec<String>)) -> Self {
             Self::new(parts.0, Some(parts.1), Some(parts.2), Some(parts.3))
         }
     }
 
-    impl From<(ShortId, Option<String>, Option<String>, Vec<String>)> for UpdateNote {
-        fn from(parts: (ShortId, Option<String>, Option<String>, Vec<String>)) -> Self {
+    impl From<(TinyId, Option<String>, Option<String>, Vec<String>)> for UpdateNote {
+        fn from(parts: (TinyId, Option<String>, Option<String>, Vec<String>)) -> Self {
             Self::new(parts.0, parts.1, parts.2, Some(parts.3))
         }
     }
 
-    impl From<(ShortId, Option<String>, Option<String>, Option<Vec<String>>)> for UpdateNote {
-        fn from(parts: (ShortId, Option<String>, Option<String>, Option<Vec<String>>)) -> Self {
+    impl From<(TinyId, Option<String>, Option<String>, Option<Vec<String>>)> for UpdateNote {
+        fn from(parts: (TinyId, Option<String>, Option<String>, Option<Vec<String>>)) -> Self {
             Self::new(parts.0, parts.1, parts.2, parts.3)
         }
     }
 
-    impl From<(ShortId, Option<String>, String, Vec<String>)> for UpdateNote {
-        fn from(parts: (ShortId, Option<String>, String, Vec<String>)) -> Self {
+    impl From<(TinyId, Option<String>, String, Vec<String>)> for UpdateNote {
+        fn from(parts: (TinyId, Option<String>, String, Vec<String>)) -> Self {
             Self::new(parts.0, parts.1, Some(parts.2), Some(parts.3))
         }
     }
 
-    impl From<(ShortId, String, Option<String>, Vec<String>)> for UpdateNote {
-        fn from(parts: (ShortId, String, Option<String>, Vec<String>)) -> Self {
+    impl From<(TinyId, String, Option<String>, Vec<String>)> for UpdateNote {
+        fn from(parts: (TinyId, String, Option<String>, Vec<String>)) -> Self {
             Self::new(parts.0, Some(parts.1), parts.2, Some(parts.3))
         }
     }
 
-    impl From<(ShortId, String, String)> for UpdateNote {
-        fn from(parts: (ShortId, String, String)) -> Self {
+    impl From<(TinyId, String, String)> for UpdateNote {
+        fn from(parts: (TinyId, String, String)) -> Self {
             Self::new(parts.0, Some(parts.1), Some(parts.2), None)
         }
     }
 
-    impl From<(ShortId, Option<String>, Option<String>)> for UpdateNote {
-        fn from(parts: (ShortId, Option<String>, Option<String>)) -> Self {
+    impl From<(TinyId, Option<String>, Option<String>)> for UpdateNote {
+        fn from(parts: (TinyId, Option<String>, Option<String>)) -> Self {
             Self::new(parts.0, parts.1, parts.2, None)
         }
     }
@@ -274,33 +274,33 @@ mod update {
 mod delete {
     use serde::{Deserialize, Serialize};
 
-    use crate::ShortId;
+    use crate::TinyId;
 
     #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
     pub struct DeleteNote {
-        pub id: ShortId,
+        pub id: TinyId,
     }
 
     impl DeleteNote {
         #[must_use]
-        pub fn new(id: ShortId) -> Self {
+        pub fn new(id: TinyId) -> Self {
             Self { id }
         }
 
         #[must_use]
-        pub fn id(&self) -> &ShortId {
+        pub fn id(&self) -> &TinyId {
             &self.id
         }
     }
 
-    impl From<ShortId> for DeleteNote {
-        fn from(id: ShortId) -> Self {
+    impl From<TinyId> for DeleteNote {
+        fn from(id: TinyId) -> Self {
             Self::new(id)
         }
     }
 
-    impl From<&ShortId> for DeleteNote {
-        fn from(id: &ShortId) -> Self {
+    impl From<&TinyId> for DeleteNote {
+        fn from(id: &TinyId) -> Self {
             Self::new(*id)
         }
     }
