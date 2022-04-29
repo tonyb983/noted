@@ -451,6 +451,7 @@ mod tests {
         );
     }
 
+    #[allow(clippy::cast_possible_truncation, clippy::similar_names)]
     #[test]
     #[ignore]
     fn rng_compare() {
