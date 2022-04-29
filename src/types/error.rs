@@ -4,7 +4,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-use std::array::TryFromSliceError;
+use std::{array::TryFromSliceError, path::PathBuf};
 
 use uuid::Uuid;
 
@@ -201,6 +201,7 @@ impl From<ShortIdError> for Error {
 
 #[derive(Debug)]
 pub enum DatabaseError {
+    DataFileNotFound(PathBuf),
     IdNotFound(ShortId),
     PolicyFailure(String),
     DuplicateId,
@@ -214,6 +215,9 @@ impl std::fmt::Display for DatabaseError {
             DatabaseError::PolicyFailure(s) => write!(f, "Policy failure: {}", s),
             DatabaseError::DuplicateId => write!(f, "Duplicate IDs found in Database"),
             DatabaseError::InvalidId => write!(f, "Invalid ID found in Database"),
+            DatabaseError::DataFileNotFound(pb) => {
+                write!(f, "Data file not found at path '{}'", pb.display())
+            }
         }
     }
 }

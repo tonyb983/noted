@@ -31,6 +31,19 @@ impl Method {
     }
 }
 
+impl std::fmt::Display for Method {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Method::Json => write!(f, "json"),
+            Method::Cbor => write!(f, "cbor"),
+            Method::MsgPack => write!(f, "msgpack"),
+            Method::Protobuf => write!(f, "protobuf"),
+            Method::Flatbuffer => write!(f, "flatbuffer"),
+            Method::Flexbuffer => write!(f, "flexbuffer"),
+        }
+    }
+}
+
 /// Empty struct holding methods for persisting and retrieving data.
 pub struct Persistence;
 
@@ -44,11 +57,10 @@ impl Persistence {
     /// - `Error::Io` - If any i/o errors occur
     /// - `Error::Json` or `Error::SerDe` - If the (de)serialization process fails
     /// - `Error::NotImplemented` - If the requested method is not (yet) implemented
-    pub fn load_from_bytes<T, B: AsRef<[u8]>>(bytes: B, method: Method) -> crate::Result<T>
+    pub fn load_from_bytes<T>(bytes: &[u8], method: Method) -> crate::Result<T>
     where
         T: serde::de::DeserializeOwned,
     {
-        let bytes = bytes.as_ref();
         match method {
             Method::Json => {
                 let output: T = serde_json::from_slice(bytes)?;
@@ -122,13 +134,21 @@ impl Persistence {
     /// - `Error::Io` - If any i/o errors occur
     /// - `Error::Json` or `Error::SerDe` - If the (de)serialization process fails
     /// - `Error::NotImplemented` - If the requested method is not (yet) implemented
-    pub fn load_from_file<T, P: AsRef<Path>>(path: P, method: Method) -> crate::Result<T>
+    pub fn load_from_file<T>(path: impl AsRef<Path>, method: Method) -> crate::Result<T>
     where
         T: serde::de::DeserializeOwned,
     {
         use std::fs::File;
         use std::io::Read;
         let path = path.as_ref();
+
+        if !path.exists() {
+            return crate::Error::Database(crate::DatabaseError::DataFileNotFound(
+                path.to_path_buf(),
+            ))
+            .into();
+        }
+
         let mut file = File::open(path)?;
         let mut buf = std::io::BufReader::new(file);
         match method {
@@ -165,7 +185,7 @@ impl Persistence {
     /// - `Error::Io` - If any i/o errors occur
     /// - `Error::Json` or `Error::SerDe` - If the (de)serialization process fails
     /// - `Error::NotImplemented` - If the requested method is not (yet) implemented
-    pub fn load_from_file_default<T, P: AsRef<Path>>(path: P) -> crate::Result<T>
+    pub fn load_from_file_default<T>(path: impl AsRef<Path>) -> crate::Result<T>
     where
         T: serde::de::DeserializeOwned,
     {
@@ -181,7 +201,7 @@ impl Persistence {
     /// - `Error::Io` - If any i/o errors occur
     /// - `Error::Json` or `Error::SerDe` - If the (de)serialization process fails
     /// - `Error::NotImplemented` - If the requested method is not (yet) implemented
-    pub fn save_to_file<T, P: AsRef<Path>>(data: &T, path: P, method: Method) -> crate::Result<()>
+    pub fn save_to_file<T>(data: &T, path: impl AsRef<Path>, method: Method) -> crate::Result<()>
     where
         T: serde::Serialize,
     {
@@ -225,9 +245,9 @@ impl Persistence {
     /// - `Error::Io` - If any i/o errors occur
     /// - `Error::Json` or `Error::SerDe` - If the (de)serialization process fails
     /// - `Error::NotImplemented` - If the requested method is not (yet) implemented
-    pub fn save_to_new_file<T, P: AsRef<Path>>(
+    pub fn save_to_new_file<T>(
         data: &T,
-        path: P,
+        path: impl AsRef<Path>,
         method: Method,
     ) -> crate::Result<()>
     where
@@ -249,7 +269,7 @@ impl Persistence {
     /// - `Error::Io` - If any i/o errors occur
     /// - `Error::Json` or `Error::SerDe` - If the (de)serialization process fails
     /// - `Error::NotImplemented` - If the requested method is not (yet) implemented
-    pub fn save_to_file_default<T, P: AsRef<Path>>(data: &T, path: P) -> crate::Result<()>
+    pub fn save_to_file_default<T>(data: &T, path: impl AsRef<Path>) -> crate::Result<()>
     where
         T: serde::Serialize,
     {
@@ -264,7 +284,7 @@ impl Persistence {
     /// - `Error::Io` - If any i/o errors occur
     /// - `Error::Json` or `Error::SerDe` - If the (de)serialization process fails
     /// - `Error::NotImplemented` - If the requested method is not (yet) implemented
-    pub fn convert_file<T, P: AsRef<Path>>(path: P, from: Method, to: Method) -> crate::Result<()>
+    pub fn convert_file<T>(path: impl AsRef<Path>, from: Method, to: Method) -> crate::Result<()>
     where
         T: serde::Serialize + serde::de::DeserializeOwned,
     {
@@ -284,11 +304,7 @@ impl Persistence {
     /// - `Error::Io` - If any i/o errors occur
     /// - `Error::Json` or `Error::SerDe` - If the (de)serialization process fails
     /// - `Error::NotImplemented` - If the requested method is not (yet) implemented
-    pub fn convert_bytes<T, B: AsRef<[u8]>>(
-        bytes: B,
-        from: Method,
-        to: Method,
-    ) -> crate::Result<Vec<u8>>
+    pub fn convert_bytes<T>(bytes: &[u8], from: Method, to: Method) -> crate::Result<Vec<u8>>
     where
         T: serde::Serialize + serde::de::DeserializeOwned,
     {
@@ -343,7 +359,7 @@ mod tests {
     }
 
     #[test]
-    fn tempfile() {
+    fn save_and_load_file() {
         let data = TestStruct {
             length: 10,
             flag: true,
@@ -351,8 +367,10 @@ mod tests {
             number: -1,
             text: "hello".to_string(),
         };
-        let tempfile =
-            std::env::temp_dir().join(format!("noted-persist-tests-{:010}.tmp", fastrand::u32(..)));
+        let tempfile = std::env::temp_dir().join(format!(
+            "persist-tests-save_and_load_file-{:010}.tmp",
+            fastrand::u32(..)
+        ));
         assert!(!tempfile.exists(), "tempfile should not already exist!");
         println!("Tempfile Path: {}", tempfile.display());
 
@@ -375,6 +393,26 @@ mod tests {
                 assert_eq!(cereal, data);
             }
         }
+
+        let result = Persistence::save_to_file_default(&data, &tempfile);
+        assert!(result.is_ok());
+        let back: Result<TestStruct, _> = Persistence::load_from_file_default(&tempfile);
+        assert!(back.is_ok());
+        let cereal = back.unwrap();
+        assert_eq!(cereal, data);
+        std::fs::remove_file(tempfile).expect("Unable to delete tempfile");
+
+        let bad_file = std::env::temp_dir().join(format!(
+            "persist-tests-save_and_load_file-bad_file-{:010}.tmp",
+            fastrand::u32(..)
+        ));
+        assert!(
+            !bad_file.exists(),
+            "bad_file ({}) should not already exist!",
+            bad_file.display()
+        );
+        assert!(Persistence::load_from_file::<TestStruct>(&bad_file, Method::Json).is_err());
+        assert!(Persistence::load_from_file_default::<TestStruct>(&bad_file).is_err());
     }
 
     #[test]
@@ -390,27 +428,116 @@ mod tests {
         let mut json_bytes = Persistence::save_to_bytes(&data, Method::Json).unwrap();
 
         let mut cbor_bytes =
-            Persistence::convert_bytes::<TestStruct, _>(&json_bytes, Method::Json, Method::Cbor)
+            Persistence::convert_bytes::<TestStruct>(&json_bytes, Method::Json, Method::Cbor)
                 .unwrap();
         let cbor_data: TestStruct =
             Persistence::load_from_bytes(&cbor_bytes, Method::Cbor).unwrap();
         assert_eq!(cbor_data, data);
 
         let mut msgpack_bytes =
-            Persistence::convert_bytes::<TestStruct, _>(&cbor_bytes, Method::Cbor, Method::MsgPack)
+            Persistence::convert_bytes::<TestStruct>(&cbor_bytes, Method::Cbor, Method::MsgPack)
                 .unwrap();
         let mp_data: TestStruct =
             Persistence::load_from_bytes(&msgpack_bytes, Method::MsgPack).unwrap();
         assert_eq!(mp_data, data);
 
-        json_bytes = Persistence::convert_bytes::<TestStruct, _>(
-            &msgpack_bytes,
-            Method::MsgPack,
-            Method::Json,
-        )
-        .unwrap();
+        json_bytes =
+            Persistence::convert_bytes::<TestStruct>(&msgpack_bytes, Method::MsgPack, Method::Json)
+                .unwrap();
         let json_data: TestStruct =
             Persistence::load_from_bytes(&json_bytes, Method::Json).unwrap();
         assert_eq!(json_data, data);
+    }
+
+    #[test]
+    fn convert_file() {
+        let data = TestStruct {
+            length: 10,
+            flag: true,
+            decimal: 1.0,
+            number: -1,
+            text: "hello".to_string(),
+        };
+
+        let tempfile = std::env::temp_dir().join(format!(
+            "persist-tests-convert_file-{:010}.tmp",
+            fastrand::u32(..)
+        ));
+        assert!(
+            !tempfile.exists(),
+            "tempfile ({}) should not already exist!",
+            tempfile.display()
+        );
+
+        println!("Tempfile Path: {}", tempfile.display());
+
+        let result = Persistence::save_to_new_file(&data, &tempfile, Method::Json);
+        assert!(result.is_ok());
+
+        for &(from, to) in &[
+            (Method::Json, Method::Cbor),
+            (Method::Cbor, Method::MsgPack),
+            (Method::MsgPack, Method::Json),
+        ] {
+            assert!(
+                Persistence::convert_file::<TestStruct>(&tempfile, from, to).is_ok(),
+                "Converting tempfile from {} to {} failed",
+                from,
+                to
+            );
+            let back: Result<TestStruct, _> = Persistence::load_from_file(&tempfile, to);
+            assert!(back.is_ok());
+            let cereal = back.unwrap();
+            assert_eq!(cereal, data);
+        }
+
+        std::fs::remove_file(tempfile).expect("Unable to delete tempfile");
+
+        let bad_file = std::env::temp_dir().join(format!(
+            "persist-tests-convert_file-bad_file-{:010}.tmp",
+            fastrand::u32(..)
+        ));
+        assert!(
+            !bad_file.exists(),
+            "bad_file ({}) should not already exist!",
+            bad_file.display()
+        );
+        assert!(
+            Persistence::convert_file::<TestStruct>(&bad_file, Method::Json, Method::Cbor).is_err()
+        );
+    }
+
+    #[test]
+    fn save_and_load_file_default() {
+        let data = TestStruct {
+            length: 10,
+            flag: true,
+            decimal: 1.0,
+            number: -1,
+            text: "hello".to_string(),
+        };
+        let tempfile = std::env::temp_dir().join(format!(
+            "persist-tests-save_and_load_file_default-{:010}.tmp",
+            fastrand::u32(..)
+        ));
+        assert!(!tempfile.exists(), "tempfile should not already exist!");
+        println!("Tempfile Path: {}", tempfile.display());
+
+        let result = Persistence::save_to_file_default(&data, &tempfile);
+        assert!(result.is_ok());
+        let back: Result<TestStruct, _> = Persistence::load_from_file_default(&tempfile);
+        assert!(back.is_ok());
+        let cereal = back.unwrap();
+        assert_eq!(cereal, data);
+    }
+
+    #[test]
+    fn method_display() {
+        assert_eq!(Method::Json.to_string(), "json");
+        assert_eq!(Method::Cbor.to_string(), "cbor");
+        assert_eq!(Method::MsgPack.to_string(), "msgpack");
+        assert_eq!(Method::Protobuf.to_string(), "protobuf");
+        assert_eq!(Method::Flatbuffer.to_string(), "flatbuffer");
+        assert_eq!(Method::Flexbuffer.to_string(), "flexbuffer");
     }
 }

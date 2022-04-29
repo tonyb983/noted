@@ -12,6 +12,7 @@
     crate_visibility_modifier,
     default_free_fn,
     exclusive_range_pattern,
+    explicit_generic_args_with_impl_trait,
     half_open_range_patterns,
     let_else,
     once_cell,

@@ -224,7 +224,7 @@ impl Database {
 
     /// Attempts to create a new [`ShortId`] using [`ShortId::random_against`].
     pub fn create_id(&self) -> Option<ShortId> {
-        ShortId::random_against(self)
+        ShortId::random_against_db(self)
     }
 
     /// Attempts to create a new [`ShortId`] for use in this [`Database`]
@@ -232,7 +232,7 @@ impl Database {
     /// infinite loop but it seems unlikely.
     pub fn create_id_force(&self) -> ShortId {
         loop {
-            if let Some(id) = ShortId::random_against(self) {
+            if let Some(id) = ShortId::random_against_db(self) {
                 return id;
             }
         }

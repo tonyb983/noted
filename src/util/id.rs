@@ -58,22 +58,34 @@ impl ShortId {
     /// Create a new random [`ShortId`].
     #[must_use]
     pub fn random() -> Self {
-        let mut data = [NULL_CHAR; 8];
-        for ch in &mut data {
-            *ch = LETTERS[fastrand::usize(0..LETTER_COUNT)];
-        }
-        Self { data }
+        Self::random_oor()
     }
 
     /// Attempts to create a new [`ShortId`] for use in the given [`Database`](crate::db::Database).
     /// It will attempt to create an ID that is not in use a certain number of times
     /// (currently arbitrarily set to 100), and return [`Option::None`] if this fails.
     #[must_use]
-    pub fn random_against(db: &crate::db::Database) -> Option<Self> {
+    pub fn random_against_db(db: &crate::db::Database) -> Option<Self> {
         const MAX_ATTEMPTS: usize = 100;
         for _ in 0..MAX_ATTEMPTS {
             let id = Self::random();
             if !db.id_in_use(id) {
+                return Some(id);
+            }
+        }
+
+        None
+    }
+
+    /// Attempts to create a new [`ShortId`] that is not contained within the given [`HashSet`](std::collections::HashSet).
+    /// It will attempt to create an ID that is not in use a certain number of times
+    /// (currently arbitrarily set to 100), and return [`Option::None`] if this fails.
+    #[must_use]
+    pub fn random_against_list(list: &std::collections::HashSet<Self>) -> Option<Self> {
+        const MAX_ATTEMPTS: usize = 100;
+        for _ in 0..MAX_ATTEMPTS {
+            let id = Self::random();
+            if !list.contains(&id) {
                 return Some(id);
             }
         }
@@ -169,6 +181,76 @@ impl ShortId {
     }
 }
 
+/// RNG Type Comparison
+impl ShortId {
+    /// Create a new random [`ShortId`].
+    #[must_use]
+    pub(crate) fn random_fastrand() -> Self {
+        let mut data = [NULL_CHAR; 8];
+        for ch in &mut data {
+            *ch = LETTERS[fastrand::usize(0..LETTER_COUNT)];
+        }
+        Self { data }
+    }
+
+    #[must_use]
+    pub(crate) fn random_nanorand1() -> Self {
+        use nanorand::Rng;
+        let mut rng = nanorand::tls_rng();
+        let mut data = [NULL_CHAR; 8];
+        for ch in &mut data {
+            *ch = LETTERS[rng.generate_range(0..LETTER_COUNT)];
+        }
+
+        Self { data }
+    }
+
+    #[must_use]
+    pub(crate) fn random_nanorand2() -> Self {
+        use nanorand::{BufferedRng, Rng, WyRand};
+        let mut rng = BufferedRng::new(nanorand::tls_rng());
+
+        let mut data = [NULL_CHAR; 8];
+        rng.fill_bytes(&mut data);
+        for ch in &mut data {
+            *ch /= 4;
+        }
+        Self { data }
+    }
+
+    #[must_use]
+    pub(crate) fn random_rand1() -> Self {
+        use rand::distributions::{Alphanumeric, Distribution, Uniform};
+        let range = Uniform::new(0, LETTER_COUNT);
+        let mut rng = rand::thread_rng();
+        let mut data = [NULL_CHAR; 8];
+        for b in range
+            .sample_iter(&mut rng)
+            .take(8)
+            .enumerate()
+            .map(|(i, l)| (i, LETTERS[l]))
+        {
+            data[b.0] = b.1;
+        }
+
+        Self { data }
+    }
+
+    #[allow(clippy::cast_possible_truncation)]
+    #[must_use]
+    pub(crate) fn random_oor() -> Self {
+        const SEED: u64 = 1_000_000;
+        const LETTER_COUNT_U32: u32 = LETTER_COUNT as u32;
+        let mut rng: oorandom::Rand32 = oorandom::Rand32::new(SEED);
+        let mut data = [NULL_CHAR; 8];
+        for ch in &mut data {
+            *ch = LETTERS[rng.rand_range(0..LETTER_COUNT_U32) as usize];
+        }
+
+        Self { data }
+    }
+}
+
 impl TryFrom<[u8; 8]> for ShortId {
     type Error = ShortIdError;
 
@@ -237,6 +319,8 @@ impl std::fmt::Display for ShortId {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
+
     use super::*;
 
     #[test]
@@ -253,5 +337,181 @@ mod tests {
         let back = ShortId::from_bytes(bytes).expect("Unable to convert back to bytes");
         assert_eq!(id, back);
         assert_eq!(bytes, back.to_bytes());
+        let bad_id = ShortId::null();
+        assert!(!bad_id.is_valid());
+        assert!(bad_id.is_null());
+    }
+
+    #[test]
+    fn collision_test_one_million() {
+        use std::collections::HashSet;
+        let mut ids = HashSet::new();
+        for _ in 0..1_000_000 {
+            let id = ShortId::random();
+            assert!(ids.insert(id));
+        }
+    }
+
+    /// To run this test use the following cargo command:
+    /// ```shell
+    /// # remove `ignored` attribute and use this for simpler test output:
+    /// cargo test --package noted --lib -- util::id::tests::ignored_shortid_runs_until_collision --exact --nocapture
+    /// # or more simply use this without removing the attribute:
+    /// cargo test ignored_shortid_runs_until_collision -- --ignored --nocapture
+    /// ```
+    ///
+    /// Test Runs:
+    /// | Time (secs) | Iterations |
+    /// | --- | --- |
+    /// | 100.05 | 35,224,093 |
+    /// | 4.26 | 1,880,476 |
+    /// | 70.58 | 29,636,196 |
+    /// | 45.56 | 21,053,701 |
+    #[test]
+    #[ignore]
+    fn ignored_shortid_runs_until_collision() {
+        use std::collections::HashSet;
+        let mut ids = HashSet::new();
+        let mut new_id = ShortId::random();
+        let mut counter: usize = 0;
+        let mut failures: usize = 0;
+        while failures < 2 {
+            while ids.insert(new_id) {
+                new_id = ShortId::random();
+                counter += 1;
+            }
+            failures += 1;
+        }
+        println!("Collision detected after {} iterations", counter);
+    }
+
+    /// Compares generating 1,000,000 instances of:
+    /// - [`ShortId::random`]
+    /// - [`uuid::Uuid::new_v4`]
+    /// - [`fastrand::u64`]
+    /// - [`fastrand::u8`] x8
+    /// Results are ...not great...
+    #[allow(clippy::cast_possible_truncation, clippy::similar_names)]
+    #[test]
+    #[ignore]
+    fn generation_comparison() {
+        const ITERS: usize = 1_000_000;
+        let now = std::time::Instant::now();
+        for _ in 0..ITERS {
+            let _id = ShortId::random();
+        }
+        let sid_elapsed = now.elapsed();
+        let sid_average = sid_elapsed / ITERS as u32;
+
+        let now = std::time::Instant::now();
+        for _ in 0..ITERS {
+            let _num = fastrand::u64(..);
+        }
+        let num_elapsed = now.elapsed();
+        let num_average = num_elapsed / ITERS as u32;
+
+        let now = std::time::Instant::now();
+        for _ in 0..ITERS {
+            let _n1 = fastrand::u8(..);
+            let _n2 = fastrand::u8(..);
+            let _n3 = fastrand::u8(..);
+            let _n4 = fastrand::u8(..);
+            let _n5 = fastrand::u8(..);
+            let _n6 = fastrand::u8(..);
+            let _n7 = fastrand::u8(..);
+            let _n8 = fastrand::u8(..);
+        }
+        let num8_elapsed = now.elapsed();
+        let num8_average = num8_elapsed / ITERS as u32;
+
+        let now = std::time::Instant::now();
+        for _ in 0..ITERS {
+            let _uuid = uuid::Uuid::new_v4();
+        }
+        let uuid_elapsed = now.elapsed();
+        let uuid_average = uuid_elapsed / ITERS as u32;
+
+        println!("Results after {} iterations:", ITERS);
+        println!();
+        println!(
+            "         ShortId: {:>10?} ({:>10?} ave.)",
+            sid_elapsed, sid_average
+        );
+        println!(
+            "   fastrand::u64: {:>10?} ({:>10?} ave.)",
+            num_elapsed, num_average
+        );
+        println!(
+            "fastrand::u8(x8): {:>10?} ({:>10?} ave.)",
+            num8_elapsed, num8_average
+        );
+        println!(
+            "    Uuid::new_v4: {:>10?} ({:>10?} ave.)",
+            uuid_elapsed, uuid_average
+        );
+    }
+
+    #[test]
+    #[ignore]
+    fn rng_compare() {
+        const ITERS: usize = 1_000_000;
+
+        let now = std::time::Instant::now();
+        for _ in 0..ITERS {
+            let _id = ShortId::random();
+        }
+        let std_elapsed = now.elapsed();
+        let std_average = std_elapsed / ITERS as u32;
+
+        let now = std::time::Instant::now();
+        for _ in 0..ITERS {
+            let _id = ShortId::random_rand1();
+        }
+        let rand1_elapsed = now.elapsed();
+        let rand1_average = rand1_elapsed / ITERS as u32;
+
+        let now = std::time::Instant::now();
+        for _ in 0..ITERS {
+            let _id = ShortId::random_nanorand1();
+        }
+        let nano1_elapsed = now.elapsed();
+        let nano1_average = nano1_elapsed / ITERS as u32;
+
+        let now = std::time::Instant::now();
+        for _ in 0..ITERS {
+            let _id = ShortId::random_nanorand2();
+        }
+        let nano2_elapsed = now.elapsed();
+        let nano2_average = nano2_elapsed / ITERS as u32;
+
+        let now = std::time::Instant::now();
+        for _ in 0..ITERS {
+            let _id = ShortId::random_oor();
+        }
+        let oor_elapsed = now.elapsed();
+        let oor_average = oor_elapsed / ITERS as u32;
+
+        println!("Results after {} iterations:", ITERS);
+        println!();
+        println!(
+            "   ShortId: {:>10?} ({:>10?} ave.)",
+            std_elapsed, std_average
+        );
+        println!(
+            "    rand 1: {:>10?} ({:>10?} ave.)",
+            rand1_elapsed, rand1_average
+        );
+        println!(
+            "nanorand 1: {:>10?} ({:>10?} ave.)",
+            nano1_elapsed, nano1_average
+        );
+        println!(
+            "nanorand 2: {:>10?} ({:>10?} ave.)",
+            nano2_elapsed, nano2_average
+        );
+        println!(
+            "  oorandom: {:>10?} ({:>10?} ave.)",
+            oor_elapsed, oor_average
+        );
     }
 }
