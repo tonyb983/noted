@@ -15,6 +15,7 @@
     explicit_generic_args_with_impl_trait,
     half_open_range_patterns,
     let_else,
+    lint_reasons,
     once_cell,
     pattern,
     round_char_boundary,

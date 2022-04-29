@@ -184,11 +184,32 @@ impl ShortId {
 /// RNG Type Comparison
 impl ShortId {
     /// Create a new random [`ShortId`].
+    ///
+    /// This method calls [`fastrand::u8`] 8 times
+    #[allow(
+        clippy::cast_possible_truncation,
+        reason = "LETTER_COUNT is a constant of 64 so this is safe"
+    )]
     #[must_use]
     pub(crate) fn random_fastrand() -> Self {
+        const LETTER_COUNT_U8: u8 = LETTER_COUNT as u8;
         let mut data = [NULL_CHAR; 8];
         for ch in &mut data {
-            *ch = LETTERS[fastrand::usize(0..LETTER_COUNT)];
+            *ch = LETTERS[fastrand::u8(0..LETTER_COUNT_U8) as usize];
+        }
+        Self { data }
+    }
+
+    /// Create a new random [`ShortId`].
+    ///
+    /// This method uses a single call to [`fastrand::u64`], splits it into bytes, and uses
+    /// them to index the letter array.
+    #[must_use]
+    pub(crate) fn random_fastrand2() -> Self {
+        let seed = fastrand::u64(..);
+        let mut data: [u8; 8] = seed.to_be_bytes();
+        for b in &mut data {
+            *b = LETTERS[*b as usize % LETTER_COUNT];
         }
         Self { data }
     }
@@ -213,7 +234,7 @@ impl ShortId {
         let mut data = [NULL_CHAR; 8];
         rng.fill_bytes(&mut data);
         for ch in &mut data {
-            *ch /= 4;
+            *ch = LETTERS[*ch as usize % LETTER_COUNT];
         }
         Self { data }
     }
@@ -239,9 +260,8 @@ impl ShortId {
     #[allow(clippy::cast_possible_truncation)]
     #[must_use]
     pub(crate) fn random_oor() -> Self {
-        const SEED: u64 = 1_000_000;
         const LETTER_COUNT_U32: u32 = LETTER_COUNT as u32;
-        let mut rng: oorandom::Rand32 = oorandom::Rand32::new(SEED);
+        let mut rng: oorandom::Rand32 = oorandom::Rand32::new(fastrand::u64(..));
         let mut data = [NULL_CHAR; 8];
         for ch in &mut data {
             *ch = LETTERS[rng.rand_range(0..LETTER_COUNT_U32) as usize];
@@ -459,10 +479,17 @@ mod tests {
 
         let now = std::time::Instant::now();
         for _ in 0..ITERS {
-            let _id = ShortId::random();
+            let _id = ShortId::random_fastrand();
         }
-        let std_elapsed = now.elapsed();
-        let std_average = std_elapsed / ITERS as u32;
+        let fr_elapsed = now.elapsed();
+        let fr_average = fr_elapsed / ITERS as u32;
+
+        let now = std::time::Instant::now();
+        for _ in 0..ITERS {
+            let _id = ShortId::random_fastrand2();
+        }
+        let fr2_elapsed = now.elapsed();
+        let fr2_average = fr2_elapsed / ITERS as u32;
 
         let now = std::time::Instant::now();
         for _ in 0..ITERS {
@@ -494,9 +521,118 @@ mod tests {
 
         println!("Results after {} iterations:", ITERS);
         println!();
+        println!(" fastrand1: {:>10?} ({:>10?} ave.)", fr_elapsed, fr_average);
         println!(
-            "   ShortId: {:>10?} ({:>10?} ave.)",
-            std_elapsed, std_average
+            " fastrand2: {:>10?} ({:>10?} ave.)",
+            fr2_elapsed, fr2_average
+        );
+        println!(
+            "    rand 1: {:>10?} ({:>10?} ave.)",
+            rand1_elapsed, rand1_average
+        );
+        println!(
+            "nanorand 1: {:>10?} ({:>10?} ave.)",
+            nano1_elapsed, nano1_average
+        );
+        println!(
+            "nanorand 2: {:>10?} ({:>10?} ave.)",
+            nano2_elapsed, nano2_average
+        );
+        println!(
+            "  oorandom: {:>10?} ({:>10?} ave.)",
+            oor_elapsed, oor_average
+        );
+    }
+
+    #[allow(
+        clippy::cast_possible_truncation,
+        clippy::similar_names,
+        clippy::needless_range_loop
+    )]
+    #[test]
+    #[ignore]
+    fn rng_compare_validated() {
+        const ITERS: usize = 1_000_000;
+        let mut generated = box [ShortId::null(); ITERS];
+
+        generated = box [ShortId::null(); ITERS];
+        let now = std::time::Instant::now();
+        for i in 0..ITERS {
+            generated[i] = ShortId::random_fastrand();
+        }
+        let fr_elapsed = now.elapsed();
+        let fr_average = fr_elapsed / ITERS as u32;
+        assert!(
+            generated.iter().all(|id| id.is_valid()),
+            "fastrand1 failed validation!"
+        );
+
+        generated = box [ShortId::null(); ITERS];
+        let now = std::time::Instant::now();
+        for i in 0..ITERS {
+            generated[i] = ShortId::random_fastrand2();
+        }
+        let fr2_elapsed = now.elapsed();
+        let fr2_average = fr2_elapsed / ITERS as u32;
+        assert!(
+            generated.iter().all(|id| id.is_valid()),
+            "fastrand2 failed validation!"
+        );
+
+        generated = box [ShortId::null(); ITERS];
+        let now = std::time::Instant::now();
+        for i in 0..ITERS {
+            generated[i] = ShortId::random_rand1();
+        }
+        let rand1_elapsed = now.elapsed();
+        let rand1_average = rand1_elapsed / ITERS as u32;
+        assert!(
+            generated.iter().all(|id| id.is_valid()),
+            "rand1 failed validation!"
+        );
+
+        generated = box [ShortId::null(); ITERS];
+        let now = std::time::Instant::now();
+        for i in 0..ITERS {
+            generated[i] = ShortId::random_nanorand1();
+        }
+        let nano1_elapsed = now.elapsed();
+        let nano1_average = nano1_elapsed / ITERS as u32;
+        assert!(
+            generated.iter().all(|id| id.is_valid()),
+            "nanorand1 failed validation!"
+        );
+
+        generated = box [ShortId::null(); ITERS];
+        let now = std::time::Instant::now();
+        for i in 0..ITERS {
+            generated[i] = ShortId::random_nanorand2();
+        }
+        let nano2_elapsed = now.elapsed();
+        let nano2_average = nano2_elapsed / ITERS as u32;
+        assert!(
+            generated.iter().all(|id| id.is_valid()),
+            "nanorand2 failed validation!"
+        );
+
+        generated = box [ShortId::null(); ITERS];
+        let now = std::time::Instant::now();
+        for i in 0..ITERS {
+            generated[i] = ShortId::random_oor();
+        }
+        let oor_elapsed = now.elapsed();
+        let oor_average = oor_elapsed / ITERS as u32;
+        assert!(
+            generated.iter().all(|id| id.is_valid()),
+            "oorandom failed validation!"
+        );
+
+        println!("Results after {} iterations:", ITERS);
+        println!();
+        println!(" fastrand1: {:>10?} ({:>10?} ave.)", fr_elapsed, fr_average);
+        println!(
+            " fastrand2: {:>10?} ({:>10?} ave.)",
+            fr2_elapsed, fr2_average
         );
         println!(
             "    rand 1: {:>10?} ({:>10?} ave.)",
