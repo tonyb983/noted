@@ -9,9 +9,14 @@
 # General Todo-List
 
 - [ ] Write app-wide types into their own `types` module.
-- [ ] Setup app-wide `Error` and `Result` types.
+    - [ ] [error](./src/types/error.rs) - Crate wide `Error` and `Result` types. Mostly Complete.
+    - [ ] [note](./src/types/note.rs) - The full "Note" struct. Dtos are found in [note_dto](./src/types/note_dto.rs). Mostly Complete.
+    - [ ] [api](./src/types/api/mod.rs) - These are the "standard api parameters", filtering, ordering, and sorting. Mostly Complete.
+    - [ ] [api](./src/types/api/mod.rs) - These are the "standard api parameters", filtering, ordering, and sorting. Mostly Complete.
+    - [ ] [taglist](./src/types/taglist.rs) - Just an idea, having the list of tags inside of `Note` be its own separate struct, which would be a thin wrapper around `Vec<String>` that adds some necessary functionality. Implemented but not included yet.
 - [ ] Explore fuzzy text matching, library vs hand-rolled.
 - [ ] Explore revision, change tracking, and rollbacks.
+- [ ] Consider pulling `Persistence` and `TinyId` into their own separate crate / repo.
 - [ ] Setup database access and testing.
     - [ ] Multiple databases?
     - [ ] "Code to the interface, not the implementation"

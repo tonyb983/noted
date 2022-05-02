@@ -180,6 +180,9 @@ impl Database {
         }
     }
 
+    /// Checks the given list of [`Note`]s, and applies any changes, modifications,
+    /// or pending deletions that are detected. This call will reset the flags on
+    /// each [`Note`], which is why it requires a mutable reference to each.
     pub fn ensure_sync(&mut self, notes: &mut [Note]) {
         for note in notes.iter_mut() {
             if note.pending_delete() {
@@ -193,12 +196,7 @@ impl Database {
                 continue;
             }
 
-            match self.notes.iter_mut().find(|n| n.id() == note.id()) {
-                Some(existing) => {
-                    existing.update_from(note);
-                }
-                None => self.notes.push(note.clone()),
-            }
+            self.upsert(note);
             note.clear_flags();
         }
     }

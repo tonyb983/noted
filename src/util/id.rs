@@ -69,7 +69,6 @@ impl TinyId {
     ///
     /// ## Errors
     /// - [`TinyIdError::GenerationFailure`] - If a unique ID cannot be generated
-    #[must_use]
     pub fn random_against_db(db: &crate::db::Database) -> std::result::Result<Self, TinyIdError> {
         const MAX_ATTEMPTS: usize = 100;
         for _ in 0..MAX_ATTEMPTS {
@@ -88,7 +87,6 @@ impl TinyId {
     ///
     /// ## Errors
     /// - [`TinyIdError::GenerationFailure`] - If a unique ID cannot be generated
-    #[must_use]
     pub fn random_against_list(
         list: &std::collections::HashSet<Self>,
     ) -> std::result::Result<Self, TinyIdError> {
@@ -115,16 +113,20 @@ impl TinyId {
     }
 
     fn from_str(s: &str) -> std::result::Result<Self, TinyIdError> {
+        use std::char::TryFromCharError;
         if s.len() != 8 {
             return Err(TinyIdError::InvalidLength);
         }
 
         let mut data = [NULL_CHAR; 8];
-        for (i, ch) in s.bytes().enumerate() {
-            if !LETTERS.contains(&ch) {
+        for (i, ch) in s.chars().enumerate() {
+            let byte: u8 = ch
+                .try_into()
+                .map_err(|err: TryFromCharError| TinyIdError::Conversion(err.to_string()))?;
+            if !LETTERS.contains(&byte) {
                 return Err(TinyIdError::InvalidCharacters);
             }
-            data[i] = ch;
+            data[i] = byte;
         }
         Ok(Self { data })
     }
