@@ -39,14 +39,9 @@ pub struct Database {
     ids: HashSet<TinyId>,
 }
 
+/// Constructors
 impl Database {
-    pub const DEFAULT_UPDATE_POLICY: UpdateFailurePolicy = UpdateFailurePolicy::AllOrNothing;
-
-    fn init(&mut self) -> Result<()> {
-        self.validate()?;
-        Ok(())
-    }
-
+    #[must_use]
     pub fn empty() -> Self {
         Database {
             notes: Vec::new(),
@@ -54,6 +49,11 @@ impl Database {
         }
     }
 
+    /// Create a new [`Database`] from the given slice of [`Note`]s.
+    ///
+    /// ## Errors
+    /// - [`DatabaseError::InvalidId`] if the given notes contains an invalid ID.
+    /// - [`DatabaseError::InvalidState`] if a list of IDs cannot be built from the list of notes, usually indicating that the notes contain duplicate or invalid ids.
     pub fn from_notes(notes: &[Note]) -> Result<Self> {
         let mut db = Database {
             notes: notes.to_vec(),
@@ -63,6 +63,11 @@ impl Database {
         Ok(db)
     }
 
+    /// Create a new [`Database`] from the given [`Vec<Note>`], taking ownership of each item.
+    ///
+    /// ## Errors
+    /// - [`DatabaseError::InvalidId`] if the given notes contains an invalid ID.
+    /// - [`DatabaseError::InvalidState`] if a list of IDs cannot be built from the list of notes, usually indicating that the notes contain duplicate or invalid ids.
     pub fn from_notes_vec(notes: Vec<Note>) -> Result<Self> {
         let ids = notes.iter().map(Note::id).collect();
         let mut db = Database { notes, ids };
@@ -70,61 +75,46 @@ impl Database {
         Ok(db)
     }
 
+    /// Attempts to deserialize the given bytes into an instance of [`Database`].
+    ///
+    /// ## Errors
+    /// - [`DatabaseError::InvalidId`] if the given notes contains an invalid ID.
+    /// - [`DatabaseError::InvalidState`] if a list of IDs cannot be built from the list of notes, usually indicating that the notes contain duplicate or invalid ids.
+    /// - Forwards any errors from [`Persistence::load_from_bytes_default`].
     pub fn load_from_bytes(bytes: &[u8]) -> Result<Self> {
-        Ok(serde_json::from_slice(bytes)?)
+        Persistence::load_from_bytes_default(bytes)
     }
 
+    /// Attempts to load a [`Database`] from the given filepath.
+    ///
+    /// ## Errors
+    /// - [`DatabaseError::InvalidId`] if the given notes contains an invalid ID.
+    /// - [`DatabaseError::InvalidState`] if a list of IDs cannot be built from the list of notes, usually indicating that the notes contain duplicate or invalid ids.
+    /// - Forwards any errors from [`Persistence::load_from_file_default`].
     pub fn load<P: AsRef<Path>>(path: P) -> Result<Self> {
         let mut db: Self = Persistence::load_from_file_default(path)?;
         db.init()?;
         Ok(db)
     }
+}
 
-    pub(crate) fn load_dev() -> Result<Self> {
-        let project_dir = std::env::var("CARGO_MANIFEST_DIR")?;
-        let path = Path::new(&project_dir).join("data").join("dev.fdb");
-        Self::load(path)
-    }
+/// Public Methods
+impl Database {
+    pub const DEFAULT_UPDATE_POLICY: UpdateFailurePolicy = UpdateFailurePolicy::AllOrNothing;
 
-    pub(crate) fn load_dev_with(
-        filename: &str,
-        f: impl FnOnce(std::io::BufReader<std::fs::File>) -> Result<Self>,
-    ) -> Result<Self> {
-        use std::fs::File;
-        use std::io::Read;
-        let project_dir = std::env::var("CARGO_MANIFEST_DIR")?;
-        let path = Path::new(&project_dir).join("data").join(filename);
-        let mut file = File::open(path)?;
-        let mut buf_reader = std::io::BufReader::new(file);
-        let db: Self = f(buf_reader)?;
-        Ok(db)
-    }
-
+    /// Attempts to serialize this [`Database`] into bytes and writes them to a file at the given path.
+    /// If the file exists it will be overwritten, and if it does not exist it will be created.
+    ///
+    /// ## Errors
+    /// - See [`Persistence::save_to_file_default`].
     pub fn save<P: AsRef<Path>>(&self, path: P) -> Result<()> {
         Persistence::save_to_file_default(self, path)
     }
 
-    pub(crate) fn save_dev(&self) -> Result<()> {
-        let project_dir = std::env::var("CARGO_MANIFEST_DIR")?;
-        let path = Path::new(&project_dir).join("data").join("dev.fdb");
-        self.save(path)
-    }
-
-    pub(crate) fn save_dev_with(
-        &self,
-        filename: &str,
-        writer: impl FnOnce(std::io::BufWriter<std::fs::File>, &Self) -> Result<()>,
-    ) -> Result<()> {
-        use std::fs::File;
-        use std::io::Write;
-        let project_dir = std::env::var("CARGO_MANIFEST_DIR")?;
-        let path = Path::new(&project_dir).join("data").join(filename);
-        let mut file = File::create(path)?;
-        let mut buf_writer = std::io::BufWriter::new(file);
-        writer(buf_writer, self)?;
-        Ok(())
-    }
-
+    /// Attempts to apply the given data transfer object to this [`Database`].
+    ///
+    /// ## Errors
+    /// - See [`Database::apply_create`], [`Database::apply_update`], and [`Database::apply_delete`].
     pub fn apply_dto(&mut self, dto: impl Into<NoteDto>) -> Result<DtoResponse> {
         match dto.into() {
             NoteDto::Create(create_note) => {
@@ -139,6 +129,11 @@ impl Database {
         }
     }
 
+    /// Creates a new [`Note`] using the information from the [`CreateNote`] dto. The returned
+    /// result contains the newly created [`Note`] upon success (for getting the `id`, for example).
+    ///
+    /// ## Errors
+    /// - [`DatabaseError::DuplicateId`] if the given ID is already contained in this [`Database`].
     pub fn apply_create(&mut self, create: impl Into<CreateNote>) -> Result<Note> {
         let create = create.into();
         let note = Note::create_for(self, create);
@@ -149,6 +144,13 @@ impl Database {
         Ok(note)
     }
 
+    /// Updates an existing [`Note`] using the information from the [`UpdateNote`] dto. The returned
+    /// result contains `true` if the [`Note`] was found and changed, `false` if it was found but there
+    /// were no changes detected, or an error if the [`Note`] could not be found, or another problem
+    /// was encountered..
+    ///
+    /// ## Errors
+    /// - [`DatabaseError::IdNotFound`] if the given ID is not found in this [`Database`].
     pub fn apply_update(&mut self, update: impl Into<UpdateNote>) -> Result<bool> {
         let update = update.into();
         let mut note = self
@@ -159,11 +161,23 @@ impl Database {
         Ok(note.update(update))
     }
 
+    /// Deletes an existing [`Note`] using the information from the [`DeleteNote`] dto.
+    ///
+    /// TODO: This should probably be a unit return instead of bool.
+    ///
+    /// ## Errors
+    /// - [`DatabaseError::IdNotFound`] if the given ID is not found in this [`Database`].
     pub fn apply_delete(&mut self, delete: impl Into<DeleteNote>) -> Result<bool> {
         let id = *delete.into().id();
         let start = self.notes.len();
-        self.notes.retain(|n| n.id() != id);
-        Ok(start != self.notes.len())
+        match self.notes.iter().position(|n| n.id() == id) {
+            Some(index) => {
+                self.notes.remove(index);
+                self.ids.remove(&id);
+                Ok(true)
+            }
+            None => Err(DatabaseError::IdNotFound(id).into()),
+        }
     }
 
     pub fn ensure_sync(&mut self, notes: &mut [Note]) {
@@ -189,6 +203,10 @@ impl Database {
         }
     }
 
+    /// Searches for a [`Note`] with the given ID.
+    ///
+    /// ## Errors
+    /// - [`DatabaseError::IdNotFound`] if the given ID is not found in this [`Database`].
     pub fn get(&self, id: TinyId) -> Result<&Note> {
         self.notes
             .iter()
@@ -196,6 +214,10 @@ impl Database {
             .ok_or_else(|| DatabaseError::IdNotFound(id).into())
     }
 
+    /// Searches for a [`Note`] with the given ID and returns a cloned version of it.
+    ///
+    /// ## Errors
+    /// - [`DatabaseError::IdNotFound`] if the given ID is not found in this [`Database`].
     pub fn get_clone(&self, id: TinyId) -> Result<Note> {
         self.notes
             .iter()
@@ -204,6 +226,10 @@ impl Database {
             .ok_or_else(|| DatabaseError::IdNotFound(id).into())
     }
 
+    /// Uses the given function `f` to modify the [`Note`] that has the given [`TinyId`].
+    ///
+    /// ## Errors
+    /// - [`DatabaseError::IdNotFound`] if the given ID is not found in this [`Database`].
     pub fn get_and_modify(&mut self, id: TinyId, f: impl FnMut(&mut Note)) -> Result<()> {
         self.notes
             .iter_mut()
@@ -212,14 +238,21 @@ impl Database {
             .ok_or_else(|| DatabaseError::IdNotFound(id).into())
     }
 
+    /// Returns a slice containing all [`Note`]s in this [`Database`].
+    #[must_use]
     pub fn get_all(&self) -> &[Note] {
         &self.notes
     }
 
+    /// Returns a [`Vec`] containing all [`Note`]s in this [`Database`] that match
+    /// the given predicate `pred`.
+    #[must_use]
     pub fn find(&self, pred: impl Fn(&&Note) -> bool) -> Vec<&Note> {
         self.notes.iter().filter(pred).collect::<Vec<_>>()
     }
 
+    /// Performs a full text search using `query` against all [`Note`]s in this [`Database`].
+    #[must_use]
     pub fn text_search(&self, query: &str) -> Vec<&Note> {
         self.notes
             .iter()
@@ -227,33 +260,106 @@ impl Database {
             .collect::<Vec<_>>()
     }
 
+    /// The number of [`Note`]s in this [`Database`].
+    #[must_use]
     pub fn len(&self) -> usize {
         self.notes.len()
     }
 
+    /// Whether this [`Database`] is currently empty (contains zero [`Note`]s).
+    #[must_use]
     pub fn is_empty(&self) -> bool {
         self.notes.is_empty()
     }
 
     /// Checks whether the given `id` is currently being used in this [`Database`].
+    #[must_use]
     pub fn id_in_use(&self, id: TinyId) -> bool {
         self.notes.iter().any(|n| n.id() == id)
     }
 
-    /// Attempts to create a new [`ShortId`] using [`ShortId::random_against`].
-    pub fn create_id(&self) -> Result<TinyId> {
+    /// Attempts to create a new [`TinyId`] using [`TinyId::random_against_db`].
+    ///
+    /// **This does NOT add the returned ID to the db in any way.**
+    pub(crate) fn create_id(&self) -> Result<TinyId> {
         TinyId::random_against_db(self).map_err(Error::from)
     }
 
-    /// Attempts to create a new [`ShortId`] for use in this [`Database`]
+    /// Attempts to create a new [`TinyId`] for use in this [`Database`]
     /// until it is successful. This could hypothetically lead to an
     /// infinite loop but it seems unlikely.
+    #[must_use]
     pub fn create_id_force(&self) -> TinyId {
         loop {
             if let Ok(id) = TinyId::random_against_db(self) {
                 return id;
             }
         }
+    }
+
+    /// Inserts the given [`Note`] into the [`Database`], failing if the ID is already in use.
+    ///
+    /// ## Errors
+    /// - [`DatabaseError::DuplicateId`] if the given ID is already in use.
+    pub fn insert(&mut self, note: &Note) -> Result<()> {
+        if self.id_in_use(note.id()) {
+            return Err(DatabaseError::DuplicateId(note.id()).into());
+        }
+        self.notes.push(note.clone());
+        self.ids.insert(note.id());
+        Ok(())
+    }
+
+    /// Inserts the given [`Note`] into the [`Database`] if it doesn't already exist, updating it otherwise.
+    pub fn upsert(&mut self, note: &Note) {
+        if let Err(err) = self.insert(note) && let Error::Database(DatabaseError::DuplicateId(id)) = err {
+                self.get_and_modify(id, |n| n.update_from(note))
+                    .expect("file::Database::upsert - note already confirmed to exist in db");
+        }
+    }
+}
+
+/// Private / Crate Methods
+impl Database {
+    pub(crate) fn save_dev(&self) -> Result<()> {
+        let project_dir = std::env::var("CARGO_MANIFEST_DIR")?;
+        let path = Path::new(&project_dir).join("data").join("dev.fdb");
+        self.save(path)
+    }
+
+    pub(crate) fn save_dev_with(
+        &self,
+        filename: &str,
+        writer: impl FnOnce(std::io::BufWriter<std::fs::File>, &Self) -> Result<()>,
+    ) -> Result<()> {
+        use std::fs::File;
+        use std::io::Write;
+        let project_dir = std::env::var("CARGO_MANIFEST_DIR")?;
+        let path = Path::new(&project_dir).join("data").join(filename);
+        let mut file = File::create(path)?;
+        let mut buf_writer = std::io::BufWriter::new(file);
+        writer(buf_writer, self)?;
+        Ok(())
+    }
+
+    pub(crate) fn load_dev() -> Result<Self> {
+        let project_dir = std::env::var("CARGO_MANIFEST_DIR")?;
+        let path = Path::new(&project_dir).join("data").join("dev.fdb");
+        Self::load(path)
+    }
+
+    pub(crate) fn load_dev_with(
+        filename: &str,
+        f: impl FnOnce(std::io::BufReader<std::fs::File>) -> Result<Self>,
+    ) -> Result<Self> {
+        use std::fs::File;
+        use std::io::Read;
+        let project_dir = std::env::var("CARGO_MANIFEST_DIR")?;
+        let path = Path::new(&project_dir).join("data").join(filename);
+        let mut file = File::open(path)?;
+        let mut buf_reader = std::io::BufReader::new(file);
+        let db: Self = f(buf_reader)?;
+        Ok(db)
     }
 
     fn validate(&mut self) -> Result<()> {
@@ -280,6 +386,11 @@ impl Database {
         for note in &self.notes {
             self.ids.insert(note.id());
         }
+    }
+
+    fn init(&mut self) -> Result<()> {
+        self.validate()?;
+        Ok(())
     }
 }
 

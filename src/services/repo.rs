@@ -5,17 +5,11 @@
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 use crate::{
-    db::Database,
-    types::{Count, CreateNote, DeleteNote, Filter, Note, Ordering, UpdateNote},
+    db::{Database, MultiValueArgs},
+    types::api::{Count, Filter, Ordering},
+    types::{CreateNote, DeleteNote, Note, UpdateNote},
     Error, Result,
 };
-
-#[derive(Clone, Default, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct StandardArgs {
-    pub filter: Filter,
-    pub order: Ordering,
-    pub count: Count,
-}
 
 pub struct Repository {
     db: Database,
@@ -31,7 +25,7 @@ impl Repository {
     }
 
     /// TODO: Make this return an iterator maybe?
-    pub fn get_all_with(&self, args: &StandardArgs) -> Result<Vec<Note>> {
+    pub fn get_all_with(&self, args: &MultiValueArgs) -> Result<Vec<Note>> {
         let mut all = self.db.get_all().to_vec();
         let comp = args.order.comparison();
         let pred = args.filter.predicate();

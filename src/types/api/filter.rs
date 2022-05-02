@@ -197,6 +197,23 @@ pub enum NoteFilter {
 }
 
 pub type Predicate = Box<dyn Fn(&&Note) -> bool + Send + Sync>;
+pub type GenericPredicate<T> = Box<dyn Fn(&&T) -> bool + Send + Sync>;
+
+pub trait GenericFilter {
+    type Target;
+    fn predicate(&self) -> GenericPredicate<Self::Target>;
+}
+
+pub trait DataFilter {
+    type Target;
+    type Filter: GenericFilter<Target = Self::Target>;
+
+    fn add_filter(&mut self, filter: Self::Filter);
+    fn get_filters(&self) -> Vec<Self::Filter>;
+    fn clear_filters(&mut self);
+
+    fn get_predicate(&self) -> GenericPredicate<Self::Target>;
+}
 
 /// Constructors
 impl NoteFilter {
@@ -482,7 +499,7 @@ impl Default for Count {
 
 #[cfg(test)]
 mod tests {
-    use crate::types::Ordering;
+    use crate::types::api::Ordering;
     use pretty_assertions::{assert_eq, assert_ne, assert_str_eq};
 
     use super::*;

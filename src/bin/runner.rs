@@ -4,7 +4,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-use noted::types::{Note, Ordering};
+use noted::types::{api::Ordering, Note};
 
 fn main() {
     // check_ordering();
@@ -85,7 +85,7 @@ fn print_concise(notes: &[Note]) {
 }
 
 fn check_ordering() {
-    use noted::types::OrderBy;
+    use noted::types::api::OrderBy;
 
     let notes = create_notes();
     assert_eq!(notes.len(), 6, "create_notes should create 6 notes");
@@ -113,7 +113,7 @@ fn check_ordering() {
 }
 
 fn date_ordering() {
-    use noted::types::OrderBy;
+    use noted::types::api::OrderBy;
     let notes = create_notes();
     print_concise(&notes);
 

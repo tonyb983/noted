@@ -3,25 +3,30 @@
 CLI & TUI application to take and track notes.
 
 Generate Coverage (with `cargo-llvm-cov`):
+
 LCOV: `cargo llvm-cov --all-features --workspace --lcov --output-path coverage/lcov.info`
+
 HTML: `cargo llvm-cov --all-features --workspace --html`
 
-Todolist:
-- [ ] Write app-wide types into their own `types` module.
-- [ ] Setup app-wide `Error` and `Result` types.
-- [ ] Explore fuzzy text matching, library vs hand-rolled.
-- [ ] Explore revision, change tracking, and rollbacks.
-- [ ] Setup database access and testing.
-    - [ ] Multiple databases?
-    - [ ] "Code to the interface, not the implementation"
-    - [ ] What access lib, `rusqlite`, `diesel`, `sqlx`, etc?
-    - [ ] File database? Cloud database? All of the above?
-    - [ ] RocksDB? Sqlite? Bonzai?
-- [ ] Work with `clap` (probably?) for command line arg parsing for `cli` bin
-- [ ] Work with `tui` (probably?) for user interface for `tui` bin
-- [ ] So far there are 3 planned "front-ends", the normal cli (one command, with args, like `git`), the full interactive terminal interface using `tui` crate, and the "interactive cli" which I envision to be similar to the experience of running `gh repo create`, the app will query the user for information and build a command / request out of their responses, somewhat between the other two. In outlining these it is clear that there needs to be some layer between the [`Database`](./src/db/file.rs) and the front-ends. The front-end parts should essentially be able to send in their request, and then await a response. That response should then be displayed to the user, but how this is done will depend on the front-end. This brings us to a few different architectural components:
-    - [ ] "Parsing" (bad word for this) type "Service" - turns the front-end input into a request
-    - [ ] "Repository" type "Service" - takes requests, applies them against the database, returns the results
-    - [ ] "Printer" type "Service" - takes a database response and formats it in a nice way to be displayed by the front-end. This will very much be front-end specific, but there might be some overlap between how some of them do things (i.e. the `cli` and the `icli` will probably display results in the same way)
-- [ ] Explore client-server architecture for "pluggable" front-ends
-    - [ ] (g)RPC?
+## Crate Structure
+
+```
+├── data - contains test dbs and some (as of yet unused) sql functions
+└── src
+    ├── bin - The runners for each section of the application, thin runners that only call a function from the matching "bins" module
+    │   ├── cli.rs - The runner for the command line interface
+    │   ├── icli.rs - The runner for the "interactive" command line interface (think "$ gh repo create")
+    │   ├── runner.rs - Generic bin used for testing and development
+    │   └── tui.rs - The runner for the full blown terminal interface
+    ├── bins - Contains the actual code that is run from each binary in "bin"
+    ├── db - Database code. Current implemented as a simple binary file. Plan to expand to a more "Pluggable" Datasource.
+    ├── macros - Simple / helpful macros used within the crate. Currently unused.
+    ├── server - Currently unused.
+    ├── services - Currently unused, contains the beginnings of a "Repository" class for data access abstraction.
+    ├── term_ui - Currently unused, will eventually contain the widgets and whatnot that make up the "TUI" portion of the application.
+    ├── types - Types used throughout the crate, including the "full" "Note" struct, the "Error" and "Result" types, note DTOs, and api parameters.
+    └── util - Common utilities used throughout the crate.
+        ├── id.rs - Contains the "TinyId" type used as a shorter, more user-friendly, alternative to full blown UUIDs.
+        └── persist.rs - Contains utilities for saving and loading types from bytes and files, supporting multiple serialization methods.
+```
+

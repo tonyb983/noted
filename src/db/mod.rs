@@ -6,4 +6,7 @@
 
 mod file;
 
+mod traits;
+pub use traits::*;
+
 pub use file::{Database, DtoResponse, UpdateFailurePolicy};

@@ -56,8 +56,23 @@ pub struct Persistence;
 impl Persistence {
     pub const DEFAULT_METHOD: Method = Method::MsgPack;
 
-    /// Attempts to deserialize the given bytes into the requested type, returning an error
-    /// if this process fails.
+    /// Attempts to deserialize the given bytes into the requested type, using the
+    /// default serialization method (queried through [`Persistence::DEFAULT_METHOD`]),
+    /// returning an error if this process fails.
+    ///
+    /// ## Errors
+    /// - `Error::Io` - If any i/o errors occur
+    /// - `Error::Json` or `Error::SerDe` - If the (de)serialization process fails
+    /// - `Error::NotImplemented` - If the requested method is not (yet) implemented
+    pub fn load_from_bytes_default<T>(bytes: &[u8]) -> crate::Result<T>
+    where
+        T: serde::de::DeserializeOwned,
+    {
+        Self::load_from_bytes(bytes, Self::DEFAULT_METHOD)
+    }
+
+    /// Attempts to deserialize the given bytes into the requested type, using the given serialization
+    /// `method`, returning an error if this process fails.
     ///
     /// ## Errors
     /// - `Error::Io` - If any i/o errors occur
@@ -132,6 +147,20 @@ impl Persistence {
                     .into()
             }
         }
+    }
+
+    /// Attempts to serialize the given `data` into bytes, using the default serialization
+    /// method, returning an error if this process fails.
+    ///
+    /// ## Errors
+    /// - `Error::Io` - If any i/o errors occur
+    /// - `Error::Json` or `Error::SerDe` - If the (de)serialization process fails
+    /// - `Error::NotImplemented` - If the requested method is not (yet) implemented
+    pub fn save_to_bytes_default<T>(data: &T) -> crate::Result<Vec<u8>>
+    where
+        T: serde::Serialize,
+    {
+        Self::save_to_bytes(data, Self::DEFAULT_METHOD)
     }
 
     /// Loads data from the specified file, deserializing it using the indicated method.

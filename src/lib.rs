@@ -14,6 +14,7 @@
     exclusive_range_pattern,
     explicit_generic_args_with_impl_trait,
     half_open_range_patterns,
+    let_chains,
     let_else,
     lint_reasons,
     once_cell,
@@ -46,7 +47,7 @@
     clippy::unnecessary_wraps
 )]
 
-mod db;
+pub mod db;
 mod macros;
 mod server;
 mod services;
