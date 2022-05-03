@@ -333,6 +333,10 @@ impl PartialEq<Note> for Note {
 mod tests {
     use super::*;
 
+    fn make_one_note() -> Note {
+        Note::create(("title", "content", vec!["tag1", "tag2", "tag3"]))
+    }
+
     fn make_four_notes() -> Vec<Note> {
         vec![
             Note::create(("title1", "content1", vec!["tag1", "tag2", "something"])),
@@ -372,6 +376,7 @@ mod tests {
 
     #[allow(clippy::similar_names)]
     #[test]
+    #[ignore]
     fn tag_contains_compare() {
         use std::time::{Duration, Instant};
         let total_now = Instant::now();
@@ -427,5 +432,50 @@ mod tests {
             "\tHas tag100 is {}. Took {:?}.",
             mt_has_100, mt_none_elapsed
         );
+    }
+
+    #[test]
+    fn mutations() {
+        let mut note = make_one_note();
+        note.clear_flags();
+        assert_eq!(note.title, "title");
+        assert_eq!(note.content, "content");
+        assert_eq!(
+            note.tags,
+            vec!["tag1".to_string(), "tag2".to_string(), "tag3".to_string()]
+        );
+        assert!(!note.dirty());
+
+        let updated = *note.updated();
+        note.set_title("new title");
+        assert_eq!(note.title, "new title");
+        assert!(note.dirty());
+        note.clear_flags();
+        assert!(!note.dirty());
+        assert!(updated < *note.updated());
+
+        let updated = *note.updated();
+        note.update_title(str::to_uppercase);
+        assert_eq!(note.title, "NEW TITLE");
+        assert!(note.dirty());
+        note.clear_flags();
+        assert!(!note.dirty());
+        assert!(updated < *note.updated());
+
+        let updated = *note.updated();
+        note.set_content("new content");
+        assert_eq!(note.content, "new content");
+        assert!(note.dirty());
+        note.clear_flags();
+        assert!(!note.dirty());
+        assert!(updated < *note.updated());
+
+        let updated = *note.updated();
+        note.update_content(str::to_uppercase);
+        assert_eq!(note.content, "NEW CONTENT");
+        assert!(note.dirty());
+        note.clear_flags();
+        assert!(!note.dirty());
+        assert!(updated < *note.updated());
     }
 }
