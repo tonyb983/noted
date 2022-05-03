@@ -52,6 +52,13 @@ impl Ordering {
     pub fn direction(&self) -> OrderDirection {
         self.direction
     }
+
+    pub fn reverse(&mut self) {
+        self.direction = match self.direction {
+            OrderDirection::Ascending => OrderDirection::Descending,
+            OrderDirection::Descending => OrderDirection::Ascending,
+        }
+    }
 }
 
 impl Default for Ordering {

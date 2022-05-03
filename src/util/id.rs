@@ -49,7 +49,7 @@ pub struct TinyId {
 }
 
 impl TinyId {
-    /// Create an instance of the `null` [`ShortId`].
+    /// Create an instance of the `null` [`TinyId`].
     #[must_use]
     pub fn null() -> Self {
         Self {
@@ -57,13 +57,13 @@ impl TinyId {
         }
     }
 
-    /// Create a new random [`ShortId`].
+    /// Create a new random [`TinyId`].
     #[must_use]
     pub fn random() -> Self {
         Self::random_fastrand2()
     }
 
-    /// Attempts to create a new [`ShortId`] for use in the given [`Database`](crate::db::Database).
+    /// Attempts to create a new [`TinyId`] for use in the given [`Database`](crate::db::Database).
     /// It will attempt to create an ID that is not in use a certain number of times
     /// (currently arbitrarily set to 100), and return [`Option::None`] if this fails.
     ///
@@ -81,7 +81,7 @@ impl TinyId {
         Err(TinyIdError::GenerationFailure)
     }
 
-    /// Attempts to create a new [`ShortId`] that is not contained within the given [`HashSet`](std::collections::HashSet).
+    /// Attempts to create a new [`TinyId`] that is not contained within the given [`HashSet`](std::collections::HashSet).
     /// It will attempt to create an ID that is not in use a certain number of times
     /// (currently arbitrarily set to 100), and return [`Option::None`] if this fails.
     ///
@@ -101,7 +101,7 @@ impl TinyId {
         Err(TinyIdError::GenerationFailure)
     }
 
-    /// Checks whether this [`ShortId`] is null or has any invalid bytes.
+    /// Checks whether this [`TinyId`] is null or has any invalid bytes.
     #[must_use]
     pub fn is_valid(self) -> bool {
         !self.is_null() && self.data.iter().all(|&ch| LETTERS.contains(&ch))
@@ -131,7 +131,7 @@ impl TinyId {
         Ok(Self { data })
     }
 
-    /// Convert from [`&str`] to [`ShortId`], without checking the length or
+    /// Convert from [`&str`] to [`TinyId`], without checking the length or
     /// individual characters of the input.
     #[must_use]
     pub fn from_str_unchecked(s: &str) -> Self {
@@ -142,23 +142,23 @@ impl TinyId {
         Self { data }
     }
 
-    /// Convert this [`ShortId`] to an array of 8 bytes.
+    /// Convert this [`TinyId`] to an array of 8 bytes.
     #[must_use]
     pub fn to_bytes(self) -> [u8; 8] {
         self.data
     }
 
-    /// Attempt to create a new [`ShortId`] from a u64.
+    /// Attempt to create a new [`TinyId`] from a u64.
     ///
     /// ## Errors
-    /// - [`ShortIdError::InvalidLength`] if the input is not 8 bytes long.
-    /// - [`ShortIdError::InvalidCharacters`] if the input contains invalid chars/bytes.
+    /// - [`TinyIdError::InvalidLength`] if the input is not 8 bytes long.
+    /// - [`TinyIdError::InvalidCharacters`] if the input contains invalid chars/bytes.
     pub fn from_u64(n: u64) -> Result<Self, TinyIdError> {
         let bytes: [u8; 8] = n.to_be_bytes();
         Self::from_bytes(bytes)
     }
 
-    /// Creates a new [`ShortId`] from the given `u64`, without validating
+    /// Creates a new [`TinyId`] from the given `u64`, without validating
     /// that the bytes are valid.
     #[must_use]
     pub fn from_u64_unchecked(n: u64) -> Self {
@@ -166,16 +166,16 @@ impl TinyId {
         Self { data }
     }
 
-    /// Convert this [`ShortId`] to a u64 representation.
+    /// Convert this [`TinyId`] to a u64 representation.
     #[must_use]
     pub fn to_u64(self) -> u64 {
         u64::from_be_bytes(self.data)
     }
 
-    /// Attempt to create a new [`ShortId`] from the given byte array.
+    /// Attempt to create a new [`TinyId`] from the given byte array.
     ///
     /// ## Errors
-    /// - [`ShortIdError::InvalidCharacters`] if the input contains invalid chars/bytes.
+    /// - [`TinyIdError::InvalidCharacters`] if the input contains invalid chars/bytes.
     pub fn from_bytes(bytes: [u8; 8]) -> Result<Self, TinyIdError> {
         let id = Self { data: bytes };
         if id.is_valid() {
@@ -185,7 +185,7 @@ impl TinyId {
         }
     }
 
-    /// Creates a new [`ShortId`] from the given `[u8; 8]`, without validating
+    /// Creates a new [`TinyId`] from the given `[u8; 8]`, without validating
     /// that the bytes are valid.
     #[must_use]
     pub fn from_bytes_unchecked(bytes: [u8; 8]) -> Self {
@@ -195,7 +195,7 @@ impl TinyId {
 
 /// RNG Type Comparison
 impl TinyId {
-    /// Create a new random [`ShortId`].
+    /// Create a new random [`TinyId`].
     ///
     /// This method calls [`fastrand::u8`] 8 times
     #[allow(
@@ -212,7 +212,7 @@ impl TinyId {
         Self { data }
     }
 
-    /// Create a new random [`ShortId`].
+    /// Create a new random [`TinyId`].
     ///
     /// This method uses a single call to [`fastrand::u64`], splits it into bytes, and uses
     /// them to index the letter array.
@@ -365,7 +365,7 @@ impl FromIterator<u8> for TinyId {
             data[i] = ch;
         }
         let id = Self { data };
-        assert!(id.is_valid(), "ShortId::from_iter: invalid id");
+        assert!(id.is_valid(), "TinyId::from_iter: invalid id");
         id
     }
 }
@@ -431,9 +431,9 @@ mod tests {
     /// To run this test use the following cargo command:
     /// ```shell
     /// # remove `ignored` attribute and use this for simpler test output:
-    /// cargo test --package noted --lib -- util::id::tests::ignored_shortid_runs_until_collision --exact --nocapture
+    /// cargo test --package noted --lib -- util::id::tests::ignored_tinyid_runs_until_collision --exact --nocapture
     /// # or more simply use this without removing the attribute:
-    /// cargo test ignored_shortid_runs_until_collision -- --ignored --nocapture
+    /// cargo test ignored_tinyid_runs_until_collision -- --ignored --nocapture
     /// ```
     ///
     /// Test Runs:
@@ -445,7 +445,7 @@ mod tests {
     /// | 45.56 | 21,053,701 |
     #[test]
     #[ignore]
-    fn ignored_shortid_runs_until_collision() {
+    fn ignored_tinyid_runs_until_collision() {
         use std::collections::HashSet;
         let mut ids = HashSet::new();
         let mut new_id = TinyId::random();
@@ -462,7 +462,7 @@ mod tests {
     }
 
     /// Compares generating 1,000,000 instances of:
-    /// - [`ShortId::random`]
+    /// - [`TinyId::random`]
     /// - [`uuid::Uuid::new_v4`]
     /// - [`fastrand::u64`]
     /// - [`fastrand::u8`] x8
@@ -517,7 +517,7 @@ mod tests {
         println!("Results after {} iterations:", ITERS);
         println!();
         println!(
-            "         ShortId: {:>10?} ({:>10?} ave.)",
+            "         TinyId: {:>10?} ({:>10?} ave.)",
             sid_elapsed, sid_average
         );
         println!(

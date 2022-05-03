@@ -484,7 +484,7 @@ impl Count {
 impl From<usize> for Count {
     fn from(count: usize) -> Self {
         match count {
-            0 => Count::All,
+            0 | usize::MAX => Count::All,
             1 => Count::One,
             _ => Count::Some(count),
         }
