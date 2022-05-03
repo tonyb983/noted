@@ -6,5 +6,6 @@
 
 pub mod id;
 pub mod persist;
+pub mod scoped;
 pub mod validation;
 pub mod variadic;
