@@ -6,7 +6,7 @@
 
 # Source: https://github.com/taiki-e/cargo-llvm-cov#continuous-integration
 
-name: Coverage
+name: Coverage (Coveralls & Codecov)
 
 on: [pull_request, push]
 

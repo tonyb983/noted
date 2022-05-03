@@ -10,7 +10,7 @@ name: Rust (Cached)
 
 jobs:
   check:
-    name: Check
+    name: Check, Test, Lint
     continue-on-error: true
     runs-on: ${{ matrix.os }}
     strategy:
@@ -29,6 +29,7 @@ jobs:
           profile: minimal
           toolchain: nightly
           override: true
+          components: rustfmt, clippy, llvm-tools-preview
 
       - uses: Swatinem/rust-cache@v1
 
@@ -37,57 +38,10 @@ jobs:
         with:
           command: check
 
-  test:
-    name: Test Suite
-    runs-on: ${{ matrix.os }}
-    continue-on-error: true
-    strategy:
-      matrix:
-        os:
-          - ubuntu-latest
-          - macOS-latest
-          - windows-latest
-    steps:
-      - name: Checkout sources
-        uses: actions/checkout@v2
-
-      - name: Install nightly toolchain
-        uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: nightly
-          override: true
-
-      - uses: Swatinem/rust-cache@v1
-
       - name: Run cargo test
         uses: actions-rs/cargo@v1
         with:
           command: test
-
-  lints:
-    name: Clippy + rustfmt
-    continue-on-error: true
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        os:
-          - ubuntu-latest
-          - macOS-latest
-          - windows-latest
-    steps:
-      - name: Checkout sources
-        uses: actions/checkout@v2
-
-      - name: Install nightly toolchain
-        uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: nightly
-          override: true
-          components: rustfmt, clippy
-
-      - uses: Swatinem/rust-cache@v1
 
       - name: Run cargo fmt
         uses: actions-rs/cargo@v1
