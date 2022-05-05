@@ -366,6 +366,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(coverage, no_coverage)]
     fn bytes() {
         let data = TestStruct {
             length: 10,
@@ -395,9 +396,19 @@ mod tests {
                 assert_ne!(cereal, TestStruct::default());
             }
         }
+
+        let result = Persistence::save_to_bytes_default(&data);
+        assert!(result.is_ok());
+        let bytes = result.unwrap();
+        let back: Result<TestStruct, _> = Persistence::load_from_bytes_default(&bytes);
+        assert!(back.is_ok());
+        let cereal = back.unwrap();
+        assert_eq!(cereal, data);
+        assert_ne!(cereal, TestStruct::default());
     }
 
     #[test]
+    #[cfg_attr(coverage, no_coverage)]
     fn save_and_load_file() {
         let data = TestStruct {
             length: 10,
@@ -455,6 +466,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(coverage, no_coverage)]
     fn convert_bytes() {
         let data = TestStruct {
             length: 10,
@@ -489,6 +501,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(coverage, no_coverage)]
     fn convert_file() {
         let data = TestStruct {
             length: 10,
@@ -547,6 +560,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(coverage, no_coverage)]
     fn save_and_load_file_default() {
         let data = TestStruct {
             length: 10,
@@ -571,12 +585,16 @@ mod tests {
     }
 
     #[test]
-    fn method_display() {
+    #[cfg_attr(coverage, no_coverage)]
+    fn method() {
         assert_eq!(Method::Json.to_string(), "json");
         assert_eq!(Method::Cbor.to_string(), "cbor");
         assert_eq!(Method::MsgPack.to_string(), "msgpack");
         assert_eq!(Method::Protobuf.to_string(), "protobuf");
         assert_eq!(Method::Flatbuffer.to_string(), "flatbuffer");
         assert_eq!(Method::Flexbuffer.to_string(), "flexbuffer");
+
+        assert_eq!(Method::all_methods().count(), 6);
+        assert_eq!(Method::working_methods().count(), 3);
     }
 }

@@ -44,8 +44,11 @@
     // I also hate this lint
     clippy::module_name_repetitions,
     // I am undecided on this lint
-    clippy::unnecessary_wraps
+    clippy::unnecessary_wraps,
+    // I use them sparingly and only when appropriate
+    clippy::wildcard_imports,
 )]
+#![cfg_attr(coverage, feature(no_coverage))]
 
 pub mod db;
 mod macros;
@@ -58,9 +61,6 @@ pub mod types;
 pub mod util;
 
 pub use types::{DatabaseError, Error, Result};
-pub use util::{
-    id::{TinyId, TinyIdError},
-    persist::{Method, Persistence},
-};
+pub use util::persist::{Method, Persistence};
 
 shadow_rs::shadow!(build_info);

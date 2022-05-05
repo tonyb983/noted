@@ -11,12 +11,10 @@ use sqlx::{
     Row,
 };
 use time::OffsetDateTime;
+use tinyid::TinyId;
 use uuid::Uuid;
 
-use crate::{
-    types::{CreateNote, DeleteNote, UpdateNote},
-    TinyId,
-};
+use crate::types::{CreateNote, DeleteNote, UpdateNote};
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Note {
@@ -73,7 +71,7 @@ impl Note {
     pub fn create_for(db: &crate::db::Database, dto: impl Into<CreateNote>) -> Self {
         let (title, content, tags) = dto.into().into_parts();
         Self {
-            id: db.create_id_force(),
+            id: db.create_id(),
             title: title.unwrap_or_default(),
             content: content.unwrap_or_default(),
             tags,
@@ -320,6 +318,27 @@ impl Note {
 
     fn set_updated_now(&mut self) {
         self.updated = OffsetDateTime::now_utc();
+    }
+}
+
+impl std::fmt::Display for Note {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        // let fd = time::macros::format_description!("[weekday], [month repr:short] [day], [year] [hour repr:12]:[minute]:[second][period case:lower]");
+        writeln!(f, "ID: {}", self.id)?;
+        writeln!(f, "Title: {}", self.title)?;
+        writeln!(f, "Content: {}", self.content)?;
+        writeln!(f, "Tags: {:?}", self.tags)?;
+        writeln!(
+            f,
+            "Created: {}",
+            crate::util::humanize_from_now(self.created)
+        )?;
+        writeln!(
+            f,
+            "Updated: {}",
+            crate::util::humanize_from_now(self.updated)
+        )?;
+        Ok(())
     }
 }
 

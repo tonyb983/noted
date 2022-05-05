@@ -8,7 +8,7 @@ use std::str::FromStr;
 
 use super::NoteShape;
 
-use crate::TinyId;
+use tinyid::TinyId;
 
 fn validate_add_note_json(s: &str) -> Result<(), String> {
     let converted: NoteShape = serde_json::from_str(s).map_err(|e| e.to_string())?;

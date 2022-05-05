@@ -8,7 +8,7 @@ use std::{array::TryFromSliceError, path::PathBuf};
 
 use uuid::Uuid;
 
-use crate::{TinyId, TinyIdError};
+use tinyid::{TinyId, TinyIdError};
 
 #[derive(Debug)]
 pub enum Error {
@@ -22,68 +22,74 @@ pub enum Error {
     Unknown(String),
     NotImplemented(String),
     TinyId(TinyIdError),
+    Interface(String),
 }
 
 impl Error {
     #[must_use]
     pub fn env_var(err: std::env::VarError) -> Self {
-        Error::EnvVar(err)
+        Self::EnvVar(err)
     }
 
     #[must_use]
     pub fn io(err: std::io::Error) -> Self {
-        Error::Io(err)
+        Self::Io(err)
     }
 
     #[must_use]
     pub fn json(err: serde_json::Error) -> Self {
-        Error::Json(err)
+        Self::Json(err)
     }
 
     #[must_use]
     pub fn serde<S: AsRef<str>>(err: S) -> Self {
-        Error::SerDe(err.as_ref().to_string())
+        Self::SerDe(err.as_ref().to_string())
     }
 
     #[must_use]
     pub fn sqlx(err: sqlx::Error) -> Self {
-        Error::Sqlx(err)
+        Self::Sqlx(err)
     }
 
     #[must_use]
     pub fn rusqlite(err: rusqlite::Error) -> Self {
-        Error::Rusqlite(err)
+        Self::Rusqlite(err)
     }
 
     #[must_use]
     pub fn database(err: DatabaseError) -> Self {
-        Error::Database(err)
+        Self::Database(err)
     }
 
     #[must_use]
     pub fn unknown<S: AsRef<str>>(err: S) -> Self {
-        Error::Unknown(err.as_ref().to_string())
+        Self::Unknown(err.as_ref().to_string())
     }
 
     #[must_use]
     pub fn not_implemented<S: AsRef<str>>(err: S) -> Self {
-        Error::NotImplemented(err.as_ref().to_string())
+        Self::NotImplemented(err.as_ref().to_string())
+    }
+
+    pub fn ui<S: std::fmt::Display>(err: S) -> Self {
+        Self::Interface(err.to_string())
     }
 }
 
 impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Error::EnvVar(e) => e.fmt(f),
-            Error::Io(e) => e.fmt(f),
-            Error::Json(e) => e.fmt(f),
-            Error::Sqlx(e) => e.fmt(f),
-            Error::Rusqlite(e) => e.fmt(f),
-            Error::Database(e) => e.fmt(f),
-            Error::Unknown(s) => write!(f, "Unknown error: {}", s),
-            Error::SerDe(s) => write!(f, "De/Serialization error occurred: {}", s),
-            Error::NotImplemented(s) => write!(f, "Not implemented: {}", s),
-            Error::TinyId(e) => e.fmt(f),
+            Self::EnvVar(e) => e.fmt(f),
+            Self::Io(e) => e.fmt(f),
+            Self::Json(e) => e.fmt(f),
+            Self::Sqlx(e) => e.fmt(f),
+            Self::Rusqlite(e) => e.fmt(f),
+            Self::Database(e) => e.fmt(f),
+            Self::Unknown(s) => write!(f, "Unknown error: {}", s),
+            Self::SerDe(s) => write!(f, "De/Serialization error occurred: {}", s),
+            Self::NotImplemented(s) => write!(f, "Not implemented: {}", s),
+            Self::TinyId(e) => e.fmt(f),
+            Self::Interface(s) => write!(f, "User interface error: {}", s),
         }
     }
 }
@@ -196,6 +202,11 @@ impl<'s> From<&'s str> for Error {
 impl From<TinyIdError> for Error {
     fn from(err: TinyIdError) -> Self {
         Self::TinyId(err)
+    }
+}
+impl From<inquire::error::InquireError> for Error {
+    fn from(err: inquire::error::InquireError) -> Self {
+        Self::ui(err)
     }
 }
 

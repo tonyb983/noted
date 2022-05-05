@@ -137,8 +137,7 @@ mod create {
 
 mod update {
     use serde::{Deserialize, Serialize};
-
-    use crate::TinyId;
+    use tinyid::TinyId;
 
     #[derive(Debug, Clone, Serialize, Deserialize)]
     pub struct UpdateNote {
@@ -273,8 +272,7 @@ mod update {
 
 mod delete {
     use serde::{Deserialize, Serialize};
-
-    use crate::TinyId;
+    use tinyid::TinyId;
 
     #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
     pub struct DeleteNote {

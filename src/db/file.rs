@@ -7,12 +7,13 @@
 use std::{collections::HashSet, path::Path};
 
 use serde::{Deserialize, Serialize};
+use tinyid::TinyId;
 use uuid::Uuid;
 
 use crate::{
     types::{CreateNote, DeleteNote, Note, NoteDto, UpdateNote},
     util::persist::Persistence,
-    DatabaseError, Error, Result, TinyId,
+    DatabaseError, Error, Result,
 };
 
 /// Intermediate type that is used to serialize [`Database`] so that the
@@ -279,20 +280,12 @@ impl Database {
     /// Attempts to create a new [`TinyId`] using [`TinyId::random_against_db`].
     ///
     /// **This does NOT add the returned ID to the db in any way.**
-    pub(crate) fn create_id(&self) -> Result<TinyId> {
-        TinyId::random_against_db(self).map_err(Error::from)
-    }
-
-    /// Attempts to create a new [`TinyId`] for use in this [`Database`]
-    /// until it is successful. This could hypothetically lead to an
-    /// infinite loop but it seems unlikely.
-    #[must_use]
-    pub fn create_id_force(&self) -> TinyId {
-        loop {
-            if let Ok(id) = TinyId::random_against_db(self) {
-                return id;
-            }
+    pub(crate) fn create_id(&self) -> TinyId {
+        let mut id = TinyId::random();
+        while self.ids.contains(&id) {
+            id = TinyId::random();
         }
+        id
     }
 
     /// Inserts the given [`Note`] into the [`Database`], failing if the ID is already in use.

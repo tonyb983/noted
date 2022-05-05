@@ -9,12 +9,11 @@
 //! - Process the command and return the results
 //! - Format and pretty-print the results
 
-use crate::{
-    types::{
-        api::{Count, Filter, NoteFilter, Ordering},
-        CreateNote, DeleteNote, NoteDto,
-    },
-    TinyId,
+use tinyid::TinyId;
+
+use crate::types::{
+    api::{Count, Filter, NoteFilter, Ordering},
+    CreateNote, DeleteNote, NoteDto,
 };
 
 mod app;
