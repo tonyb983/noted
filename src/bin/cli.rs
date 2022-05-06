@@ -6,6 +6,6 @@
 
 use noted::{bins, Result};
 
-fn main() -> Result<()> {
+fn main() -> Result {
     bins::cli::run_cli(std::env::args())
 }

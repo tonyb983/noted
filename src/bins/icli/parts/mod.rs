@@ -9,6 +9,11 @@ pub mod list_notes;
 pub mod menu;
 pub mod view_note;
 
+pub trait ICliComponent {
+    type Output = ();
+    fn execute(db: &mut crate::db::Database, backend: Backend) -> crate::Result<Self::Output>;
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Backend {
     Dialoguer,

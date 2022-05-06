@@ -15,7 +15,7 @@
 ///
 /// ## Errors
 /// - If the underlying process errors.
-pub fn run_tui(args: std::env::Args) -> crate::Result<()> {
+pub fn run_tui(args: std::env::Args) -> crate::Result {
     println!("Noted TUI. Args: {}", args.collect::<Vec<_>>().join(" "));
 
     if let Err(err) = crate::term_ui::list::execute() {

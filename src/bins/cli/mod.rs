@@ -61,7 +61,7 @@ impl From<u64> for CliVerbosity {
 /// ## Errors
 /// - If the underlying process errors.
 #[allow(clippy::too_many_lines, reason = "WIP")]
-pub fn run_cli(args: std::env::Args) -> crate::Result<()> {
+pub fn run_cli(args: std::env::Args) -> crate::Result {
     use crate::types::api::StringSearch;
 
     println!("Noted CLI. Args: {}", args.collect::<Vec<_>>().join(" "));

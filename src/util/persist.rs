@@ -236,7 +236,7 @@ impl Persistence {
     /// - `Error::Io` - If any i/o errors occur
     /// - `Error::Json` or `Error::SerDe` - If the (de)serialization process fails
     /// - `Error::NotImplemented` - If the requested method is not (yet) implemented
-    pub fn save_to_file<T>(data: &T, path: impl AsRef<Path>, method: Method) -> crate::Result<()>
+    pub fn save_to_file<T>(data: &T, path: impl AsRef<Path>, method: Method) -> crate::Result
     where
         T: serde::Serialize,
     {
@@ -280,11 +280,7 @@ impl Persistence {
     /// - `Error::Io` - If any i/o errors occur
     /// - `Error::Json` or `Error::SerDe` - If the (de)serialization process fails
     /// - `Error::NotImplemented` - If the requested method is not (yet) implemented
-    pub fn save_to_new_file<T>(
-        data: &T,
-        path: impl AsRef<Path>,
-        method: Method,
-    ) -> crate::Result<()>
+    pub fn save_to_new_file<T>(data: &T, path: impl AsRef<Path>, method: Method) -> crate::Result
     where
         T: serde::Serialize,
     {
@@ -304,7 +300,7 @@ impl Persistence {
     /// - `Error::Io` - If any i/o errors occur
     /// - `Error::Json` or `Error::SerDe` - If the (de)serialization process fails
     /// - `Error::NotImplemented` - If the requested method is not (yet) implemented
-    pub fn save_to_file_default<T>(data: &T, path: impl AsRef<Path>) -> crate::Result<()>
+    pub fn save_to_file_default<T>(data: &T, path: impl AsRef<Path>) -> crate::Result
     where
         T: serde::Serialize,
     {
@@ -321,7 +317,7 @@ impl Persistence {
     /// - `Error::Io` - If any i/o errors occur
     /// - `Error::Json` or `Error::SerDe` - If the (de)serialization process fails
     /// - `Error::NotImplemented` - If the requested method is not (yet) implemented
-    pub fn convert_file<T>(path: impl AsRef<Path>, from: Method, to: Method) -> crate::Result<()>
+    pub fn convert_file<T>(path: impl AsRef<Path>, from: Method, to: Method) -> crate::Result
     where
         T: serde::Serialize + serde::de::DeserializeOwned,
     {

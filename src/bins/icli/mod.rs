@@ -16,7 +16,7 @@ mod parts;
 /// - All the fucking time!
 /// # Panics
 /// - Exactly 5% of the time it is called, on a completely random basis. Suck it.
-pub fn execute() -> crate::Result<()> {
+pub fn execute() -> crate::Result {
     let mut db = match inquire::Select::new("Choose Database:", vec!["Dev (Random Data)", "Empty"])
         .prompt()?
     {
@@ -32,9 +32,9 @@ pub fn execute() -> crate::Result<()> {
             _ => unreachable!(),
         };
 
-    println!("Running with backend {:?}", backend);
+    // println!("Running with backend {:?}", backend);
     let choice = parts::menu::execute(backend)?;
-    println!("Choice = {}", choice);
+    // println!("Choice = {}", choice);
 
     match choice {
         parts::menu::MenuOptions::CreateNote => {

@@ -108,7 +108,7 @@ impl Database {
     ///
     /// ## Errors
     /// - See [`Persistence::save_to_file_default`].
-    pub fn save<P: AsRef<Path>>(&self, path: P) -> Result<()> {
+    pub fn save<P: AsRef<Path>>(&self, path: P) -> Result {
         Persistence::save_to_file_default(self, path)
     }
 
@@ -229,7 +229,7 @@ impl Database {
     ///
     /// ## Errors
     /// - [`DatabaseError::IdNotFound`] if the given ID is not found in this [`Database`].
-    pub fn get_and_modify(&mut self, id: TinyId, f: impl FnMut(&mut Note)) -> Result<()> {
+    pub fn get_and_modify(&mut self, id: TinyId, f: impl FnMut(&mut Note)) -> Result {
         self.notes
             .iter_mut()
             .find(|n| n.id() == id)
@@ -292,7 +292,7 @@ impl Database {
     ///
     /// ## Errors
     /// - [`DatabaseError::DuplicateId`] if the given ID is already in use.
-    pub fn insert(&mut self, note: &Note) -> Result<()> {
+    pub fn insert(&mut self, note: &Note) -> Result {
         if self.id_in_use(note.id()) {
             return Err(DatabaseError::DuplicateId(note.id()).into());
         }
@@ -312,7 +312,7 @@ impl Database {
 
 /// Private / Crate Methods
 impl Database {
-    pub(crate) fn save_dev(&self) -> Result<()> {
+    pub(crate) fn save_dev(&self) -> Result {
         let project_dir = std::env::var("CARGO_MANIFEST_DIR")?;
         let path = Path::new(&project_dir).join("data").join("dev.fdb");
         self.save(path)
@@ -321,8 +321,8 @@ impl Database {
     pub(crate) fn save_dev_with(
         &self,
         filename: &str,
-        writer: impl FnOnce(std::io::BufWriter<std::fs::File>, &Self) -> Result<()>,
-    ) -> Result<()> {
+        writer: impl FnOnce(std::io::BufWriter<std::fs::File>, &Self) -> Result,
+    ) -> Result {
         use std::fs::File;
         use std::io::Write;
         let project_dir = std::env::var("CARGO_MANIFEST_DIR")?;
@@ -353,7 +353,7 @@ impl Database {
         Ok(db)
     }
 
-    fn validate(&mut self) -> Result<()> {
+    fn validate(&mut self) -> Result {
         if self.ids.len() != self.notes.len() {
             self.register_ids();
         }
@@ -379,7 +379,7 @@ impl Database {
         }
     }
 
-    fn init(&mut self) -> Result<()> {
+    fn init(&mut self) -> Result {
         self.validate()?;
         Ok(())
     }
@@ -445,7 +445,7 @@ mod tests {
     }
 
     /// Saves the given database to the standard dev location
-    fn save_dev_db(db: &Database) -> Result<()> {
+    fn save_dev_db(db: &Database) -> Result {
         println!("Created database with {} notes.", db.len());
         println!("Saving database...");
         let now = std::time::Instant::now();

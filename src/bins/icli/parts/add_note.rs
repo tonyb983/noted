@@ -80,7 +80,7 @@ pub mod with_d {
 }
 
 /// TODO: Turn this into a trait that limits access to [`Database`] methods.
-pub fn execute(db: &mut crate::db::Database, backend: super::Backend) -> crate::Result<()> {
+pub fn execute(db: &mut crate::db::Database, backend: super::Backend) -> crate::Result {
     let mut dto = match backend {
         super::Backend::Dialoguer => with_d::execute(db)?,
         super::Backend::Inquire => with_i::execute(db)?,

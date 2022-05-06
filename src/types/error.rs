@@ -238,7 +238,7 @@ impl std::fmt::Display for DatabaseError {
 impl std::error::Error for DatabaseError {}
 
 #[must_use]
-pub type Result<T> = std::result::Result<T, Error>;
+pub type Result<T = ()> = std::result::Result<T, Error>;
 
 impl<T> From<Error> for Result<T> {
     fn from(err: Error) -> Self {
