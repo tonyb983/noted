@@ -328,16 +328,8 @@ impl std::fmt::Display for Note {
         writeln!(f, "Title: {}", self.title)?;
         writeln!(f, "Content: {}", self.content)?;
         writeln!(f, "Tags: {:?}", self.tags)?;
-        writeln!(
-            f,
-            "Created: {}",
-            crate::util::humanize_from_now(self.created)
-        )?;
-        writeln!(
-            f,
-            "Updated: {}",
-            crate::util::humanize_from_now(self.updated)
-        )?;
+        writeln!(f, "Created: {}", crate::util::humanize_to_now(self.created))?;
+        writeln!(f, "Updated: {}", crate::util::humanize_to_now(self.updated))?;
         Ok(())
     }
 }

@@ -4,7 +4,37 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
+use tinyid::TinyId;
+
 use crate::types::Note;
+
+struct CompactNote<'s> {
+    pub id: TinyId,
+    pub title: &'s str,
+}
+
+impl<'s> CompactNote<'s> {
+    pub fn new(note: &'s Note) -> Self {
+        CompactNote {
+            id: note.id(),
+            title: note.title(),
+        }
+    }
+
+    pub fn to_string_single(&self) -> impl std::fmt::Display {
+        format!("ID: {} | Title: {}", self.id, self.title)
+    }
+
+    pub fn to_string_multiple(&self) -> impl std::fmt::Display {
+        format!("ID: {}\nTitle: {}", self.id, self.title)
+    }
+}
+
+impl std::fmt::Display for CompactNote<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.to_string_single())
+    }
+}
 
 mod with_d {
     use dialoguer::{theme::ColorfulTheme, Select};
@@ -15,13 +45,17 @@ mod with_d {
             println!("There are no notes to display!");
             return Ok(None);
         }
+        let compact = all_notes
+            .iter()
+            .map(super::CompactNote::new)
+            .collect::<Vec<_>>();
         let choice = Select::with_theme(&ColorfulTheme::default())
             .with_prompt("Notes:")
             .max_length(10)
-            .items(&all_notes)
+            .items(&compact)
             .interact_opt()?;
 
-        Ok(choice.and_then(|i| all_notes.get(i).cloned()))
+        Ok(choice.and_then(|i| all_notes.iter().find(|n| n.id() == compact[i].id).cloned()))
     }
 }
 
@@ -36,9 +70,13 @@ mod with_i {
             println!("There are no notes to display!");
             return Ok(None);
         }
-        let mut select = Select::new("Notes:", all_notes).with_page_size(10);
+        let compact = all_notes
+            .iter()
+            .map(super::CompactNote::new)
+            .collect::<Vec<_>>();
+        let mut select = Select::new("Notes:", compact).with_page_size(10);
         let choice = select.prompt_skippable()?;
-        Ok(choice)
+        Ok(choice.and_then(|cn| all_notes.iter().find(|n| n.id() == cn.id).cloned()))
     }
 }
 

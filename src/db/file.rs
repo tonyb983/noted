@@ -36,7 +36,7 @@ impl TryFrom<IntermediateDatabase> for Database {
 #[serde(try_from = "IntermediateDatabase")]
 pub struct Database {
     notes: Vec<Note>,
-    // #[serde(skip)]
+    #[serde(skip)]
     ids: HashSet<TinyId>,
 }
 
@@ -460,12 +460,14 @@ mod tests {
         result
     }
 
-    // #[test]
+    #[test]
+    #[ignore]
     fn create_dev_db_1000() {
         save_dev_db(&create_dev_db(1000));
     }
 
-    // #[test]
+    #[test]
+    #[ignore]
     fn load_dev_db_time() {
         let now = std::time::Instant::now();
         let db = Database::load_dev().expect("Unable to load database!");
