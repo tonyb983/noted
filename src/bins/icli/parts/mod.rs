@@ -7,11 +7,24 @@
 pub mod add_note;
 pub mod list_notes;
 pub mod menu;
+pub mod pick_note;
 pub mod view_note;
 
-pub trait ICliComponent {
+#[derive(Default, Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct NoOptions;
+
+pub trait Component {
     type Output = ();
-    fn execute(db: &mut crate::db::Database, backend: Backend) -> crate::Result<Self::Output>;
+    type Options: Default = NoOptions;
+    fn execute(db: &mut crate::db::Database, backend: Backend) -> crate::Result<Self::Output> {
+        Self::execute_with(db, backend, Self::Options::default())
+    }
+
+    fn execute_with(
+        db: &mut crate::db::Database,
+        backend: Backend,
+        options: Self::Options,
+    ) -> crate::Result<Self::Output>;
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -23,4 +36,5 @@ pub enum Backend {
 pub use add_note::execute as add_note;
 pub use list_notes::execute as list_notes;
 pub use menu::execute as menu;
-pub use view_note::execute as view_note;
+pub use pick_note::{execute as pick_note, execute_with as pick_note_with};
+pub use view_note::execute_with as view_note_with;

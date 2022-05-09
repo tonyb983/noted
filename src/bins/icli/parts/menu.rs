@@ -117,3 +117,17 @@ pub fn execute(backend: super::Backend) -> crate::Result<MenuOptions> {
     println!("Menu choice: {}", choice);
     Ok(choice)
 }
+
+pub struct MenuComponent;
+
+impl super::Component for MenuComponent {
+    type Output = MenuOptions;
+
+    fn execute_with(
+        db: &mut crate::db::Database,
+        backend: super::Backend,
+        _options: super::NoOptions,
+    ) -> crate::Result<Self::Output> {
+        self::execute(backend)
+    }
+}

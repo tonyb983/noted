@@ -29,4 +29,3 @@ HTML: `cargo llvm-cov --all-features --workspace --html`
         ├── id.rs - Contains the "TinyId" type used as a shorter, more user-friendly, alternative to full blown UUIDs.
         └── persist.rs - Contains utilities for saving and loading types from bytes and files, supporting multiple serialization methods.
 ```
-

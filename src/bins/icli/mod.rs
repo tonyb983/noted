@@ -40,7 +40,10 @@ pub fn execute() -> crate::Result {
         parts::menu::MenuOptions::CreateNote => {
             parts::add_note(&mut db, backend)?;
         }
-        parts::menu::MenuOptions::ViewNote => todo!("View Note not implemented."),
+        parts::menu::MenuOptions::ViewNote => {
+            let choice = parts::pick_note(&mut db, backend)?;
+            parts::view_note_with(&mut db, backend, choice)?;
+        }
         parts::menu::MenuOptions::ListNotes => {
             let result = parts::list_notes(&mut db, backend)?;
             if let Some(note) = result {

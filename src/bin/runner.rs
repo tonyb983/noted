@@ -6,120 +6,54 @@
 
 #![allow(unused)]
 
-use noted::types::{api::Ordering, Note};
-
 fn main() {
-    // check_ordering();
-    date_ordering();
-}
-
-fn create_notes() -> Vec<Note> {
-    vec![
-            Note::create((
-                "A Title",
-                "The content for the note goes here.",
-                vec!["tag1", "tag2"],
-            )),
-            Note::create((
-                "Some Title",
-                "Here is content for the note the for content is Here.",
-                vec!["1tag", "2tag"],
-            )),
-            Note::create((
-                "This is Title",
-                "Whoa, how about this note content.",
-                vec!["tag1", "tag2"],
-            )),
-            Note::create((
-                "Gooooo Title",
-                "My my, how amazing this note is!",
-                vec!["whoa", "dude"],
-            )),
-            Note::create((
-                "Last Title",
-                "Once upon a time, there was a note. It was beautiful.",
-                vec!["tag1", "tag2"],
-            )),
-            Note::create((
-                "Title Goes Here",
-                "This note has a title that does not end in the word Title, what a fkin rebel this guy is.",
-                vec!["what", "a", "rebel"],
-            )),
-        ]
-}
-
-fn apply_order(notes: &[Note], order: Ordering) -> Vec<Note> {
-    let mut notes = notes.to_vec();
-    notes.sort_unstable_by(order.comparison());
-    notes
-}
-
-fn print_titles(notes: &[Note], linebreak: bool) {
-    let titles = notes.iter().map(Note::title).collect::<Vec<_>>();
-    if linebreak {
-        println!("{}", titles.join("\n"));
-    } else {
-        println!("{}", titles.join(" "));
-    }
-}
-
-fn print_contents(notes: &[Note], linebreak: bool) {
-    let titles = notes.iter().map(Note::content).collect::<Vec<_>>();
-    if linebreak {
-        println!("{}", titles.join("\n"));
-    } else {
-        println!("{}", titles.join(" "));
-    }
-}
-
-fn print_concise(notes: &[Note]) {
-    println!("--------------------------------------------------------------------------------");
-    for (i, note) in notes.iter().enumerate() {
-        println!("Note #{}", i + 1);
-        println!("Title: {}", note.title());
-        println!("Content: {}", note.content());
-        println!("Tags: [{}]", note.tags().join(", "));
-        println!("Created: {} \t Updated: {}", note.created(), note.updated());
-        println!(
-            "--------------------------------------------------------------------------------"
-        );
-    }
-}
-
-fn check_ordering() {
-    use noted::types::api::OrderBy;
-
-    let notes = create_notes();
-    assert_eq!(notes.len(), 6, "create_notes should create 6 notes");
-
-    let title_asc = Ordering::ascending(OrderBy::Title);
-    let content_desc = Ordering::descending(OrderBy::Content);
-    let ordered_ta = apply_order(&notes, title_asc);
-    let ordered_cd = apply_order(&notes, content_desc);
-
-    println!("Starting Titles:");
-    print_titles(&notes, true);
+    print!("Hello, World!");
     println!();
-
-    println!("Ascending Titles:");
-    print_titles(&ordered_ta, true);
+    termimad::print_inline("*Hello, World!*");
     println!();
+    termimad::print_inline("**Hello, World!**");
+    let now = std::time::Instant::now();
+    let output = termimad::term_text(
+        r#"
+# My Project!
 
-    println!("Starting Contents:");
-    print_contents(&notes, true);
-    println!();
-
-    println!("Descending Contents:");
-    print_contents(&ordered_cd, true);
-    println!();
+Here's an example: 
+```rust
+fn hello() -> Option<String> {
+    println!("Hello, World!");
+    None
 }
+```
 
-fn date_ordering() {
-    use noted::types::api::OrderBy;
-    let notes = create_notes();
-    print_concise(&notes);
+## List
+- Item 1
+- Item 2
+- Item 3
+    - Item 3.1
+    - Item 3.2
+- Item 4
 
-    let created_desc = Ordering::descending(OrderBy::Created);
-    let ordered = apply_order(&notes, created_desc);
-    print_concise(&ordered);
+## From Readme
+|:-:|:-:|-
+|**feature**|**supported**|**details**|
+|-:|:-:|-
+| tables | yes | pipe based, with or without alignments
+| italic, bold | yes | star based |
+| inline code | yes | `with backquotes` (it works in tables too)
+| code bloc | yes |with tabs or code fences
+| syntax coloring | no |
+| crossed text |  ~~not yet~~ | wait... now it works `~~like this~~`
+| horizontal rule | yes | Use 3 or more dashes (`---`)
+| lists | yes|* unordered lists supported
+|  | |* ordered lists *not* supported
+| quotes |  yes |> What a wonderful time to be alive!
+| links | no | (but your terminal already handles raw URLs)
+|-
+"#,
+    );
+    let elapsed = now.elapsed();
+
+    println!("{}", output);
+    println!("{:#?}", output);
+    println!("Markdown parsing took {:?}", elapsed);
 }

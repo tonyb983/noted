@@ -102,3 +102,15 @@ pub fn execute(db: &mut crate::db::Database, backend: super::Backend) -> crate::
 
     Ok(())
 }
+
+struct AddNoteComponent;
+
+impl super::Component for AddNoteComponent {
+    fn execute_with(
+        db: &mut crate::db::Database,
+        backend: super::Backend,
+        _options: super::NoOptions,
+    ) -> crate::Result<Self::Output> {
+        self::execute(db, backend)
+    }
+}

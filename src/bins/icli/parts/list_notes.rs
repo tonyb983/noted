@@ -89,3 +89,17 @@ pub fn execute(
         super::Backend::Inquire => with_i::execute(db),
     }
 }
+
+pub struct ListNoteComponent;
+
+impl super::Component for ListNoteComponent {
+    type Output = Option<Note>;
+
+    fn execute_with(
+        db: &mut crate::db::Database,
+        backend: super::Backend,
+        _options: super::NoOptions,
+    ) -> crate::Result<Self::Output> {
+        self::execute(db, backend)
+    }
+}

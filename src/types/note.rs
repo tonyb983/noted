@@ -237,8 +237,18 @@ impl Note {
     }
 
     #[must_use]
+    pub fn created_humanized(&self) -> impl std::fmt::Display {
+        crate::util::dtf::humanize_timespan_to_now(self.created)
+    }
+
+    #[must_use]
     pub fn updated(&self) -> &OffsetDateTime {
         &self.updated
+    }
+
+    #[must_use]
+    pub fn updated_humanized(&self) -> impl std::fmt::Display {
+        crate::util::dtf::humanize_timespan_to_now(self.updated)
     }
 
     #[must_use]
@@ -328,8 +338,16 @@ impl std::fmt::Display for Note {
         writeln!(f, "Title: {}", self.title)?;
         writeln!(f, "Content: {}", self.content)?;
         writeln!(f, "Tags: {:?}", self.tags)?;
-        writeln!(f, "Created: {}", crate::util::humanize_to_now(self.created))?;
-        writeln!(f, "Updated: {}", crate::util::humanize_to_now(self.updated))?;
+        writeln!(
+            f,
+            "Created: {}",
+            crate::util::dtf::humanize_timespan_to_now(self.created)
+        )?;
+        writeln!(
+            f,
+            "Updated: {}",
+            crate::util::dtf::humanize_timespan_to_now(self.updated)
+        )?;
         Ok(())
     }
 }
