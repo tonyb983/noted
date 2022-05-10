@@ -36,6 +36,7 @@ flexbuffers = "2.0.0"
 indicatif = { version = "0.16.2", features = ["improved_unicode"] }
 inquire = "0.2.1"
 jetscii = { version = "0.5.1", features = ["pattern"] }
+minime = "0.2.0"
 names = { version = "0.13.0", default-features = false }
 nanorand = "0.7.0"
 oorandom = "11.1.3"

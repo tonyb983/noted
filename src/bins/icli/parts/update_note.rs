@@ -6,50 +6,6 @@
 
 use crate::types::Note;
 
-mod with_i {}
-
-mod with_d {
-    use dialoguer::{theme::ColorfulTheme, Editor, Input};
-
-    pub fn execute(
-        db: &mut crate::db::Database,
-        backend: super::super::Backend,
-        target: &Option<super::Note>,
-    ) -> crate::Result<()> {
-        let mut note = match target {
-            Some(n) => n.clone(),
-            None => {
-                eprintln!("No note selected!");
-                return Ok(());
-            }
-        };
-
-        let theme = ColorfulTheme::default();
-        let title: String = Input::with_theme(&theme)
-            .with_initial_text(note.title())
-            .with_prompt("Title:")
-            .interact()?;
-
-        let content = match Editor::new()
-            .require_save(true)
-            .trim_newlines(true)
-            .edit(note.content())?
-        {
-            Some(new) => new,
-            None => {
-                eprintln!("Error editing content.");
-                return Ok(());
-            }
-        };
-
-        note.set_title(title.as_str());
-        note.set_content(content.as_str());
-        db.ensure_sync(&mut [note]);
-
-        Ok(())
-    }
-}
-
 pub fn execute(db: &mut crate::db::Database, backend: super::Backend) -> crate::Result<()> {
     execute_with(db, backend, &None)
 }
@@ -59,10 +15,60 @@ pub fn execute_with(
     backend: super::Backend,
     option: &Option<Note>,
 ) -> crate::Result<()> {
-    match backend {
-        super::Backend::Dialoguer => with_d::execute(db, backend, option),
-        super::Backend::Inquire => unimplemented!(
-            "Inquire backend lacks an `Editor` type, please use Dialoguer backend instead"
-        ),
-    }
+    use minime::{
+        editor::{keybindings::NormalKeybinding, Editor},
+        renderer::{
+            full::CrosstermRenderer,
+            styles::classic::{ClassicFooter, ClassicGutter, ClassicHeader},
+        },
+        Result,
+    };
+
+    let mut note = match option {
+        Some(n) => n.clone(),
+        None => {
+            eprintln!("No note selected!");
+            return Ok(());
+        }
+    };
+
+    let title: String = match backend {
+        super::Backend::Dialoguer => {
+            dialoguer::Input::with_theme(&dialoguer::theme::ColorfulTheme::default())
+                .with_initial_text(note.title())
+                .with_prompt("Title:")
+                .interact()?
+        }
+        super::Backend::Inquire => inquire::Text::new("Title:")
+            .with_initial_value(note.title())
+            .prompt()?,
+    };
+
+    let content = {
+        let stdout = std::io::stdout();
+        let mut lock = stdout.lock();
+
+        let renderer = CrosstermRenderer::render_to(&mut lock)
+            .max_height(Some(10))
+            .margin(ClassicGutter)
+            .header(ClassicHeader {
+                message: "Enter on the last line or Esc to submit your input!",
+            })
+            .footer(ClassicFooter);
+
+        // Print out some prompt using styling options.
+        let mut term = Editor::with_renderer(renderer);
+        term.set_contents(note.content().as_bytes())
+            .map_err(crate::Error::ui)?;
+        match term.read(NormalKeybinding) {
+            Ok(it) => it,
+            Err(err) => return crate::Error::ui(err.to_string()).into(),
+        }
+    };
+
+    note.set_title(title.as_str());
+    note.set_content(content.as_str());
+    db.ensure_sync(&mut [note]);
+
+    Ok(())
 }
