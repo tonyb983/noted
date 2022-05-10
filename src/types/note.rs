@@ -202,7 +202,9 @@ impl Note {
         &self.tags
     }
 
-    pub fn set_tags(&mut self, tags: Vec<String>) {
+    pub fn set_tags(&mut self, mut tags: Vec<String>) {
+        tags.sort_unstable();
+        tags.dedup();
         if self.tags != tags {
             self.tags = tags;
             self.set_updated_now();
@@ -324,6 +326,11 @@ impl Note {
         self.tags = Vec::new();
         self.created = OffsetDateTime::UNIX_EPOCH;
         self.updated = OffsetDateTime::UNIX_EPOCH;
+    }
+
+    pub fn touch(&mut self) {
+        self.set_updated_now();
+        self.set_dirty(true);
     }
 
     fn set_updated_now(&mut self) {

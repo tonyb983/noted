@@ -60,6 +60,12 @@ impl<T> From<Vec<T>> for OneOrMore<T> {
     }
 }
 
+impl<T: Clone> From<&[T]> for OneOrMore<T> {
+    fn from(ts: &[T]) -> Self {
+        Self::many(ts.to_vec())
+    }
+}
+
 impl<T> FromIterator<T> for OneOrMore<T> {
     fn from_iter<I: IntoIterator<Item = T>>(iter: I) -> Self {
         let ts: Vec<T> = iter.into_iter().collect();

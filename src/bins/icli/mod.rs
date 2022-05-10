@@ -20,12 +20,16 @@ mod parts;
 /// - Exactly 5% of the time it is called, on a completely random basis. Suck it.
 pub fn execute() -> crate::Result {
     let mut dev_db = false;
-    let mut db = match inquire::Select::new(
+    let backend =
+        match inquire::Select::new("Choose Backend:", vec!["Dialoguer", "Inquire"]).prompt()? {
+            "Dialoguer" => parts::Backend::Dialoguer,
+            "Inquire" => parts::Backend::Inquire,
+            _ => unreachable!(),
+        };
+    let mut db = match backend.select_str(
         "Choose Database:",
-        vec!["Existing Dev Db", "Create New Dev Db", "Empty"],
-    )
-    .prompt()?
-    {
+        &["Existing Dev Db", "Create New Dev Db", "Empty"],
+    )? {
         "Existing Dev Db" => {
             dev_db = true;
             crate::db::Database::load_dev()?
@@ -34,13 +38,10 @@ pub fn execute() -> crate::Result {
         "Empty" => crate::db::Database::empty(),
         _ => unreachable!(),
     };
-    // let backend = parts::Backend::Inquire;
-    let backend =
-        match inquire::Select::new("Choose Backend:", vec!["Dialoguer", "Inquire"]).prompt()? {
-            "Dialoguer" => parts::Backend::Dialoguer,
-            "Inquire" => parts::Backend::Inquire,
-            _ => unreachable!(),
-        };
+
+    let should_loop = backend.confirm(
+        "Run as REPL? (i.e. continously until exit is chosen, vs. only one command and then exit)",
+    )?;
 
     loop {
         // println!("Running with backend {:?}", backend);
@@ -63,7 +64,7 @@ pub fn execute() -> crate::Result {
             }
             parts::menu::MenuOptions::UpdateNote => {
                 let choice = parts::pick_note(&mut db, backend)?;
-                parts::update_note_with(&mut db, backend, &choice)?;
+                parts::edit_note_with(&mut db, backend, &choice)?;
             }
             parts::menu::MenuOptions::ViewTags => {
                 let tag = if let Some(tag) = parts::list_tags(&mut db, backend)? {
@@ -92,16 +93,20 @@ pub fn execute() -> crate::Result {
                 break;
             }
         }
+
+        if !should_loop {
+            break;
+        }
     }
 
-    if inquire::Confirm::new("Save Database?").prompt()? {
+    if backend.confirm("Save Database?")? {
         if dev_db {
             db.save_dev()?;
         } else {
             let project_dir = std::env::var("CARGO_MANIFEST_DIR")?;
             let data_path = std::path::Path::new(&project_dir).join("data");
             let db_name = loop {
-                let mut filename = inquire::Text::new("Enter filename:").prompt()?;
+                let mut filename = backend.text("Enter filename:", None)?;
                 if filename.is_empty() || filename.contains(['\\', '/', ':', '.']) {
                     println!("Invalid filename, try again.");
                     continue;
@@ -111,9 +116,7 @@ pub fn execute() -> crate::Result {
             };
 
             let path = data_path.join(&db_name);
-            if !path.exists()
-                || inquire::Confirm::new("File already exists, overwrite?").prompt()?
-            {
+            if !path.exists() || backend.confirm("File already exists, overwrite?")? {
                 db.save(&path)?;
             }
         }

@@ -12,7 +12,7 @@ use uuid::Uuid;
 
 use crate::{
     types::{CreateNote, DeleteNote, Note, NoteDto, UpdateNote},
-    util::persist::Persistence,
+    util::{persist::Persistence, variadic::OneOrMore},
     DatabaseError, Error, Result,
 };
 
@@ -186,6 +186,25 @@ impl Database {
     /// each [`Note`], which is why it requires a mutable reference to each.
     pub fn ensure_sync(&mut self, notes: &mut [Note]) {
         for note in notes.iter_mut() {
+            if note.pending_delete() {
+                let _result = self.apply_delete(note.id());
+                note.clear_flags();
+                note.make_invalid();
+                continue;
+            }
+
+            if !note.dirty() {
+                continue;
+            }
+
+            self.upsert(note);
+            note.clear_flags();
+        }
+    }
+
+    pub fn ensure_sync_v2<'n>(&mut self, input: impl Into<OneOrMore<&'n mut Note>>) {
+        let input = input.into();
+        for note in input.into_values() {
             if note.pending_delete() {
                 let _result = self.apply_delete(note.id());
                 note.clear_flags();

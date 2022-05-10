@@ -79,43 +79,8 @@ impl std::fmt::Display for MenuOptions {
     }
 }
 
-mod with_dialoguer {
-    use super::*;
-    use dialoguer::{theme::ColorfulTheme, FuzzySelect};
-
-    pub fn execute() -> crate::Result<MenuOptions> {
-        let choice = FuzzySelect::with_theme(&ColorfulTheme::default())
-            .with_prompt("Select an option")
-            .default(MenuOptions::Exit.into())
-            .items(MenuOptions::all())
-            .interact_opt()?
-            .unwrap_or_else(|| MenuOptions::Exit.into());
-
-        Ok(choice.into())
-    }
-}
-
-mod with_inquire {
-    use super::*;
-    use inquire::Select;
-
-    pub fn execute() -> crate::Result<MenuOptions> {
-        let choice = Select::new("Select an option", MenuOptions::all().to_vec())
-            .prompt_skippable()?
-            .unwrap_or(MenuOptions::Exit);
-
-        Ok(choice)
-    }
-}
-
 pub fn execute(backend: super::Backend) -> crate::Result<MenuOptions> {
-    let choice = match backend {
-        super::Backend::Dialoguer => with_dialoguer::execute(),
-        super::Backend::Inquire => with_inquire::execute(),
-    }?;
-
-    println!("Menu choice: {}", choice);
-    Ok(choice)
+    backend.select("Operations:", MenuOptions::all())
 }
 
 pub struct MenuComponent;

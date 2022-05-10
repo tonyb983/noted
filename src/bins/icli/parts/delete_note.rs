@@ -16,12 +16,7 @@ pub fn execute_with(
     let choice = super::pick_note(db, backend)?;
     println!("Are you sure you want to delete this note?");
     super::view_note_with(db, backend, choice.clone())?;
-    if let Some(note) = choice && match backend {
-        super::Backend::Dialoguer => dialoguer::Confirm::new()
-            .with_prompt("Delete note?")
-            .interact()?,
-        super::Backend::Inquire => inquire::Confirm::new("Delete note?").prompt()?,
-    } {
+    if let Some(note) = choice && backend.confirm("Delete note?")? {
         db.apply_delete(note)?;
         println!("Note deleted!");
     }

@@ -60,15 +60,12 @@ pub fn execute_with(
         let mut term = Editor::with_renderer(renderer);
         term.set_contents(note.content().as_bytes())
             .map_err(crate::Error::ui)?;
-        match term.read(NormalKeybinding) {
-            Ok(it) => it,
-            Err(err) => return crate::Error::ui(err.to_string()).into(),
-        }
+        term.read(NormalKeybinding).map_err(crate::Error::ui)?
     };
 
     note.set_title(title.as_str());
     note.set_content(content.as_str());
-    db.ensure_sync(&mut [note]);
+    db.ensure_sync_v2(&mut note);
 
     Ok(())
 }

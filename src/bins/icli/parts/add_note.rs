@@ -4,6 +4,8 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
+use crate::types::CreateNote;
+
 pub mod with_i {
     use inquire::Text;
 
@@ -81,21 +83,20 @@ pub mod with_d {
 
 /// TODO: Turn this into a trait that limits access to [`Database`] methods.
 pub fn execute(db: &mut crate::db::Database, backend: super::Backend) -> crate::Result {
-    let mut dto = match backend {
-        super::Backend::Dialoguer => with_d::execute(db)?,
-        super::Backend::Inquire => with_i::execute(db)?,
-    };
+    let title = backend.text("Title:", None)?;
+    let content = backend.multiline_text("Content:", None)?;
+    let tags = backend.text_array("Tags:")?;
 
     println!(
         "New Note:\n\tTitle: {}\n\tContent: {}\n\tTags: [{}]",
-        dto.title().unwrap_or_default(),
-        dto.content().unwrap_or_default(),
-        dto.tags().join(", ")
+        title,
+        content,
+        tags.join(", ")
     );
-    if match backend {
-        super::Backend::Dialoguer => with_d::confirm("Are you sure you want to create this note?"),
-        super::Backend::Inquire => with_i::confirm("Are you sure you want to create this note?"),
-    }? {
+
+    let mut dto: CreateNote = (title, content, tags).into();
+
+    if backend.confirm("Are you sure you want to create this note?")? {
         let note = db.apply_create(dto)?;
         println!("Created note:\n{}", note);
     }
