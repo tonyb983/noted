@@ -10,6 +10,7 @@ pub mod list_notes;
 pub mod list_tags;
 pub mod menu;
 pub mod pick_note;
+pub mod update_note;
 pub mod view_note;
 
 #[derive(Default, Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -41,4 +42,5 @@ pub use list_notes::execute as list_notes;
 pub use list_tags::execute as list_tags;
 pub use menu::execute as menu;
 pub use pick_note::{execute as pick_note, execute_with as pick_note_with};
+pub use update_note::execute_with as update_note_with;
 pub use view_note::execute_with as view_note_with;

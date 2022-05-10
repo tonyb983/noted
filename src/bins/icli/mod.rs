@@ -20,13 +20,17 @@ mod parts;
 /// - Exactly 5% of the time it is called, on a completely random basis. Suck it.
 pub fn execute() -> crate::Result {
     let mut dev_db = false;
-    let mut db = match inquire::Select::new("Choose Database:", vec!["Dev (Random Data)", "Empty"])
-        .prompt()?
+    let mut db = match inquire::Select::new(
+        "Choose Database:",
+        vec!["Existing Dev Db", "Create New Dev Db", "Empty"],
+    )
+    .prompt()?
     {
-        "Dev (Random Data)" => {
+        "Existing Dev Db" => {
             dev_db = true;
             crate::db::Database::load_dev()?
         }
+        "Create New Dev Db" => crate::db::Database::create_random(),
         "Empty" => crate::db::Database::empty(),
         _ => unreachable!(),
     };
@@ -38,55 +42,55 @@ pub fn execute() -> crate::Result {
             _ => unreachable!(),
         };
 
-    // println!("Running with backend {:?}", backend);
-    let choice = parts::menu::execute(backend)?;
-    // println!("Choice = {}", choice);
+    loop {
+        // println!("Running with backend {:?}", backend);
+        let choice = parts::menu::execute(backend)?;
+        // println!("Choice = {}", choice);
 
-    match choice {
-        parts::menu::MenuOptions::CreateNote => {
-            parts::add_note(&mut db, backend)?;
-        }
-        parts::menu::MenuOptions::ViewNote => {
-            let choice = parts::pick_note(&mut db, backend)?;
-            parts::view_note_with(&mut db, backend, choice)?;
-        }
-        parts::menu::MenuOptions::ListNotes => {
-            let result = parts::list_notes(&mut db, backend)?;
-            if let Some(note) = result {
-                println!("You chose note:\n{}", note);
+        match choice {
+            parts::menu::MenuOptions::CreateNote => {
+                parts::add_note(&mut db, backend)?;
             }
-        }
-        parts::menu::MenuOptions::UpdateNote => {
-            return crate::Error::Unknown(
-                "Update Note is not yet implemented idiot, you should already know that..."
-                    .to_string(),
-            )
-            .into();
-        }
-        parts::menu::MenuOptions::ViewTags => {
-            let tag = if let Some(tag) = parts::list_tags(&mut db, backend)? {
-                tag
-            } else {
-                return Ok(());
-            };
-            let choice = parts::pick_note_with(
-                &mut db,
-                backend,
-                parts::pick_note::PickNoteOptions {
-                    filter: Some(box move |n: &Note| {
-                        let s = &tag;
-                        n.tags().contains(s)
-                    }),
-                    ..Default::default()
-                },
-            )?;
-            parts::view_note_with(&mut db, backend, choice)?;
-        }
-        parts::menu::MenuOptions::DeleteNote => {
-            parts::delete_note(&mut db, backend)?;
-        }
-        parts::menu::MenuOptions::Exit => {
-            println!("Exiting application...");
+            parts::menu::MenuOptions::ViewNote => {
+                let choice = parts::pick_note(&mut db, backend)?;
+                parts::view_note_with(&mut db, backend, choice)?;
+            }
+            parts::menu::MenuOptions::ListNotes => {
+                let result = parts::list_notes(&mut db, backend)?;
+                if let Some(note) = result {
+                    println!("You chose note:\n{}", note);
+                }
+            }
+            parts::menu::MenuOptions::UpdateNote => {
+                let choice = parts::pick_note(&mut db, backend)?;
+                parts::update_note_with(&mut db, backend, &choice)?;
+            }
+            parts::menu::MenuOptions::ViewTags => {
+                let tag = if let Some(tag) = parts::list_tags(&mut db, backend)? {
+                    tag
+                } else {
+                    return Ok(());
+                };
+                let choice = parts::pick_note_with(
+                    &mut db,
+                    backend,
+                    parts::pick_note::PickNoteOptions {
+                        filter: Some(box move |n: &Note| {
+                            let s = &tag;
+                            n.tags().contains(s)
+                        }),
+                        ..Default::default()
+                    },
+                )?;
+                parts::view_note_with(&mut db, backend, choice)?;
+            }
+            parts::menu::MenuOptions::DeleteNote => {
+                parts::delete_note(&mut db, backend)?;
+            }
+            parts::menu::MenuOptions::Exit => {
+                println!("Exiting application...");
+                break;
+            }
         }
     }
 

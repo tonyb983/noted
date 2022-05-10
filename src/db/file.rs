@@ -328,6 +328,26 @@ impl Database {
         self.save(path)
     }
 
+    pub(crate) fn create_random() -> Self {
+        let entries = fastrand::usize(500..=1000);
+        let mut notes = Vec::new();
+        for i in 0..entries {
+            let mut note = Note::create((
+                format!("Title {}", i),
+                format!("Here is the content for note number {}.", i),
+            ));
+            for i in 0..fastrand::usize(0..20) {
+                let tag = format!("tag{}", fastrand::usize(1..=20));
+                if !note.tag_matches(&tag) {
+                    note.add_tag(tag);
+                }
+            }
+            notes.push(note);
+        }
+
+        Database::from_notes_vec(notes).expect("Failed to create random database!")
+    }
+
     pub(crate) fn save_dev_with(
         &self,
         filename: &str,
