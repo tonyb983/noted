@@ -22,7 +22,7 @@ pub fn execute_with(
             return Ok(());
         }
     };
-    note.append_content("\n**Let's test out the Markdown rendering!**\n\n```rust\nfn main() {\n\tprintln!(\"Hello, world!\");\n}\n```\n\n*Italic text too!*");
+    // note.append_content("\n**Let's test out the Markdown rendering!**\n\n```rust\nfn main() {\n\tprintln!(\"Hello, world!\");\n}\n```\n\n*Italic text too!*");
 
     let text = format!(
         r#"# {}
@@ -44,6 +44,8 @@ Created: {} | Updated: {}"#,
     let formatted = termimad::term_text(&text);
 
     println!("{}", formatted);
+
+    db.ensure_sync(&mut [note]);
 
     Ok(())
 }

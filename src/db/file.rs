@@ -243,6 +243,16 @@ impl Database {
         &self.notes
     }
 
+    /// TODO: This seems like it's going to be an expensive operation, should we consider keeping a
+    ///       tag-list similar to the ID-list we are already storing?
+    #[must_use]
+    pub fn get_all_tags(&self) -> Vec<&String> {
+        let mut tags = self.notes.iter().flat_map(Note::tags).collect::<Vec<_>>();
+        tags.sort_unstable();
+        tags.dedup();
+        tags
+    }
+
     /// Returns a [`Vec`] containing all [`Note`]s in this [`Database`] that match
     /// the given predicate `pred`.
     #[must_use]

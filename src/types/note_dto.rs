@@ -274,6 +274,8 @@ mod delete {
     use serde::{Deserialize, Serialize};
     use tinyid::TinyId;
 
+    use crate::types::Note;
+
     #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
     pub struct DeleteNote {
         pub id: TinyId,
@@ -300,6 +302,18 @@ mod delete {
     impl From<&TinyId> for DeleteNote {
         fn from(id: &TinyId) -> Self {
             Self::new(*id)
+        }
+    }
+
+    impl From<Note> for DeleteNote {
+        fn from(note: Note) -> Self {
+            Self::new(note.id())
+        }
+    }
+
+    impl From<&Note> for DeleteNote {
+        fn from(note: &Note) -> Self {
+            Self::new(note.id())
         }
     }
 }

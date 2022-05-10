@@ -10,6 +10,8 @@
 //! with a full interface and whatnot, but it will query the user in a pretty way, prompting for information until a request or
 //! command has been "built", at which point it will execute and display results, very much like the normal `cli`.
 
+use crate::types::Note;
+
 mod parts;
 
 /// # Errors
@@ -17,10 +19,14 @@ mod parts;
 /// # Panics
 /// - Exactly 5% of the time it is called, on a completely random basis. Suck it.
 pub fn execute() -> crate::Result {
+    let mut dev_db = false;
     let mut db = match inquire::Select::new("Choose Database:", vec!["Dev (Random Data)", "Empty"])
         .prompt()?
     {
-        "Dev (Random Data)" => crate::db::Database::load_dev()?,
+        "Dev (Random Data)" => {
+            dev_db = true;
+            crate::db::Database::load_dev()?
+        }
         "Empty" => crate::db::Database::empty(),
         _ => unreachable!(),
     };
@@ -57,12 +63,57 @@ pub fn execute() -> crate::Result {
             )
             .into();
         }
-        parts::menu::MenuOptions::ViewTags => todo!("View Tags not implemented"),
-        parts::menu::MenuOptions::DeleteNote => todo!("Delete Note not implemented"),
+        parts::menu::MenuOptions::ViewTags => {
+            let tag = if let Some(tag) = parts::list_tags(&mut db, backend)? {
+                tag
+            } else {
+                return Ok(());
+            };
+            let choice = parts::pick_note_with(
+                &mut db,
+                backend,
+                parts::pick_note::PickNoteOptions {
+                    filter: Some(box move |n: &Note| {
+                        let s = &tag;
+                        n.tags().contains(s)
+                    }),
+                    ..Default::default()
+                },
+            )?;
+            parts::view_note_with(&mut db, backend, choice)?;
+        }
+        parts::menu::MenuOptions::DeleteNote => {
+            parts::delete_note(&mut db, backend)?;
+        }
         parts::menu::MenuOptions::Exit => {
             println!("Exiting application...");
         }
     }
+
+    if inquire::Confirm::new("Save Database?").prompt()? {
+        if dev_db {
+            db.save_dev()?;
+        } else {
+            let project_dir = std::env::var("CARGO_MANIFEST_DIR")?;
+            let data_path = std::path::Path::new(&project_dir).join("data");
+            let db_name = loop {
+                let mut filename = inquire::Text::new("Enter filename:").prompt()?;
+                if filename.is_empty() || filename.contains(['\\', '/', ':', '.']) {
+                    println!("Invalid filename, try again.");
+                    continue;
+                }
+
+                break filename;
+            };
+
+            let path = data_path.join(&db_name);
+            if !path.exists()
+                || inquire::Confirm::new("File already exists, overwrite?").prompt()?
+            {
+                db.save(&path)?;
+            }
+        }
+    };
 
     // println!("Database State: {:#?}", db);
 

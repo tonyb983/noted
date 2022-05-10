@@ -85,10 +85,10 @@ impl Default for NoteVisibility {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct PickNoteOptions {
     pub page_size: usize,
     pub field_visibility: NoteVisibility,
+    pub filter: Option<Box<dyn Fn(&Note) -> bool>>,
     pub multiline: bool,
 }
 
@@ -98,6 +98,7 @@ impl Default for PickNoteOptions {
             page_size: 10,
             field_visibility: NoteVisibility::default(),
             multiline: false,
+            filter: None,
         }
     }
 }
@@ -136,11 +137,16 @@ mod with_d {
         db: &mut crate::db::Database,
         options: &super::PickNoteOptions,
     ) -> crate::Result<Option<super::Note>> {
-        let all_notes = db.get_all().to_vec();
+        let mut all_notes = db.get_all().to_vec();
         if all_notes.is_empty() {
             println!("There are no notes to display!");
             return Ok(None);
         }
+
+        if let Some(filter) = &options.filter {
+            all_notes.retain(filter);
+        }
+
         let compact = all_notes
             .iter()
             .map(|n| super::PartialNote::from_note(n, &options.field_visibility))
@@ -164,11 +170,16 @@ mod with_i {
         db: &mut crate::db::Database,
         options: &super::PickNoteOptions,
     ) -> crate::Result<Option<super::Note>> {
-        let all_notes = db.get_all().to_vec();
+        let mut all_notes = db.get_all().to_vec();
         if all_notes.is_empty() {
             println!("There are no notes to display!");
             return Ok(None);
         }
+
+        if let Some(filter) = &options.filter {
+            all_notes.retain(filter);
+        }
+
         let compact = all_notes
             .iter()
             .map(|n| super::PartialNote::from_note(n, &options.field_visibility))

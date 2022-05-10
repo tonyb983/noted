@@ -17,12 +17,11 @@ fn abs_i64(x: i64) -> u64 {
 
 #[must_use]
 pub fn humanize_timespan_to_now(dt: OffsetDateTime) -> impl std::fmt::Display {
-    let dt = dt.into();
     humanize_timespan_between(dt, OffsetDateTime::now_utc())
 }
 
+#[must_use]
 pub fn humanize_timespan_from_now(dt: OffsetDateTime) -> impl std::fmt::Display {
-    let dt = dt.into();
     humanize_timespan_between(OffsetDateTime::now_utc(), dt)
 }
 
