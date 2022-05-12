@@ -17,8 +17,10 @@
     let_chains,
     let_else,
     lint_reasons,
+    no_coverage,
     once_cell,
     pattern,
+    proc_macro_hygiene,
     round_char_boundary,
     test,
     try_blocks
@@ -48,7 +50,21 @@
     // I use them sparingly and only when appropriate
     clippy::wildcard_imports,
 )]
-#![cfg_attr(coverage, feature(no_coverage))]
+
+//! ## Profiling Attributes
+//!
+//! Ignore for coverage if `no_coverage` feature is not globally enabled:
+//!   `#[cfg_attr(coverage, feature(no_coverage))]`
+//! Otherwise:
+//!   `#[no_coverage]`
+//!
+//! Flamegraph function (or any other item, modules, etc.) if feature-gated:
+//!   `#[cfg_attr(feature = "flame_on", flame)]`
+//! Otherwise:
+//!   `#[flame]`
+//!
+//! Only run block of code when flamegraphing:
+//!  `#[cfg(feature = "flame_on")]`
 
 pub mod db;
 mod macros;

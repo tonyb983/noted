@@ -7,6 +7,7 @@
 use crate::types::Note;
 
 pub fn execute(db: &mut crate::db::Database, backend: super::Backend) -> crate::Result {
+    crate::flame_guard!("bins", "icli", "parts", "view_note", "execute");
     execute_with(db, backend, None)
 }
 
@@ -15,6 +16,7 @@ pub fn execute_with(
     backend: super::Backend,
     options: Option<Note>,
 ) -> crate::Result {
+    crate::flame_guard!("bins", "icli", "parts", "view_note", "execute_with");
     let mut note = match options {
         Some(n) => n,
         None => {

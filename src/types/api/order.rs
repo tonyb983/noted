@@ -75,26 +75,27 @@ pub type Comparison = Box<dyn Fn(&Note, &Note) -> std::cmp::Ordering>;
 impl Ordering {
     #[must_use]
     pub fn comparison(self) -> Comparison {
+        crate::flame_guard!("types", "api", "order", "Ordering", "comparison");
         match self.field {
             OrderBy::Title => match self.direction {
-                OrderDirection::Ascending => box |a, b| a.title().cmp(b.title()),
-                OrderDirection::Descending => box |a, b| b.title().cmp(a.title()),
+                OrderDirection::Ascending => box |a: &Note, b: &Note| a.title().cmp(b.title()),
+                OrderDirection::Descending => box |a: &Note, b: &Note| b.title().cmp(a.title()),
             },
             OrderBy::Content => match self.direction {
-                OrderDirection::Ascending => box |a, b| a.content().cmp(b.content()),
-                OrderDirection::Descending => box |a, b| b.content().cmp(a.content()),
+                OrderDirection::Ascending => box |a: &Note, b: &Note| a.content().cmp(b.content()),
+                OrderDirection::Descending => box |a: &Note, b: &Note| b.content().cmp(a.content()),
             },
             OrderBy::Tags => match self.direction {
-                OrderDirection::Ascending => box |a, b| a.tags().cmp(b.tags()),
-                OrderDirection::Descending => box |a, b| b.tags().cmp(a.tags()),
+                OrderDirection::Ascending => box |a: &Note, b: &Note| a.tags().cmp(b.tags()),
+                OrderDirection::Descending => box |a: &Note, b: &Note| b.tags().cmp(a.tags()),
             },
             OrderBy::Created => match self.direction {
-                OrderDirection::Ascending => box |a, b| a.created().cmp(b.created()),
-                OrderDirection::Descending => box |a, b| b.created().cmp(a.created()),
+                OrderDirection::Ascending => box |a: &Note, b: &Note| a.created().cmp(b.created()),
+                OrderDirection::Descending => box |a: &Note, b: &Note| b.created().cmp(a.created()),
             },
             OrderBy::Updated => match self.direction {
-                OrderDirection::Ascending => box |a, b| a.updated().cmp(b.updated()),
-                OrderDirection::Descending => box |a, b| b.updated().cmp(a.updated()),
+                OrderDirection::Ascending => box |a: &Note, b: &Note| a.updated().cmp(b.updated()),
+                OrderDirection::Descending => box |a: &Note, b: &Note| b.updated().cmp(a.updated()),
             },
         }
     }

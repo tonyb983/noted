@@ -177,6 +177,7 @@ mod tests {
     }
 
     #[test]
+    #[no_coverage]
     fn all_variants() {
         let mut zom = ZeroOrMore::none();
         assert_eq!(zom.count(), 0);
@@ -203,6 +204,7 @@ mod tests {
     }
 
     #[test]
+    #[no_coverage]
     fn conv() {
         let mut zom = ZeroOrMore::none();
         assert_eq!(zom.count(), 0);
@@ -229,6 +231,7 @@ mod tests {
     }
 
     #[test]
+    #[no_coverage]
     fn as_param() {
         let sum = takes_any_number(vec![0usize, 1, 2, 3, 4]);
         let sum = takes_any_number(10);

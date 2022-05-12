@@ -20,6 +20,14 @@ pub enum NoteField {
 
 impl NoteField {
     pub fn get_from(self, note: &Note) -> String {
+        crate::flame_guard!(
+            "bins",
+            "icli",
+            "parts",
+            "pick_note",
+            "NoteField",
+            "get_from"
+        );
         match self {
             NoteField::Id => note.id().to_string(),
             NoteField::Title => note.title().to_string(),
@@ -42,6 +50,14 @@ pub enum NoteDisplay {
 
 impl NoteDisplay {
     pub fn get_from(self, note: &Note) -> String {
+        crate::flame_guard!(
+            "bins",
+            "icli",
+            "parts",
+            "pick_note",
+            "NoteDisplay",
+            "get_from"
+        );
         match self {
             NoteDisplay::Field(field) => field.get_from(note),
             NoteDisplay::Space => " ".to_string(),
@@ -69,12 +85,28 @@ pub struct NoteVisibility(pub Vec<NoteDisplay>);
 
 impl NoteVisibility {
     pub fn get_from(&self, note: &Note) -> String {
+        crate::flame_guard!(
+            "bins",
+            "icli",
+            "parts",
+            "pick_note",
+            "NoteVisibility",
+            "get_from"
+        );
         self.0.iter().map(|d| d.get_from(note)).collect()
     }
 }
 
 impl Default for NoteVisibility {
     fn default() -> Self {
+        crate::flame_guard!(
+            "bins",
+            "icli",
+            "parts",
+            "pick_note",
+            "NoteVisibility",
+            "default"
+        );
         Self(vec![
             NoteDisplay::Field(NoteField::Id),
             NoteDisplay::Space,
@@ -94,6 +126,14 @@ pub struct PickNoteOptions {
 
 impl Default for PickNoteOptions {
     fn default() -> Self {
+        crate::flame_guard!(
+            "bins",
+            "icli",
+            "parts",
+            "pick_note",
+            "PickNoteOptions",
+            "default"
+        );
         Self {
             page_size: 10,
             field_visibility: NoteVisibility::default(),
@@ -111,10 +151,19 @@ struct PartialNote {
 
 impl PartialNote {
     pub fn new(id: TinyId, text: String) -> Self {
+        crate::flame_guard!("bins", "icli", "parts", "pick_note", "PartialNote", "new");
         Self { id, text }
     }
 
     pub fn from_note(note: &Note, visibility: &NoteVisibility) -> Self {
+        crate::flame_guard!(
+            "bins",
+            "icli",
+            "parts",
+            "pick_note",
+            "PartialNote",
+            "from_note"
+        );
         let mut text = visibility.get_from(note);
 
         Self {
@@ -137,14 +186,16 @@ mod with_d {
         db: &mut crate::db::Database,
         options: &super::PickNoteOptions,
     ) -> crate::Result<Option<super::Note>> {
+        crate::flame_guard!("bins", "icli", "parts", "pick_note", "with_d", "execute");
         let mut all_notes = db.get_all().to_vec();
-        if all_notes.is_empty() {
-            println!("There are no notes to display!");
-            return Ok(None);
-        }
 
         if let Some(filter) = &options.filter {
             all_notes.retain(filter);
+        }
+
+        if all_notes.is_empty() {
+            println!("There are no notes to display (or none that match the given filter)!");
+            return Ok(None);
         }
 
         let compact = all_notes
@@ -170,14 +221,16 @@ mod with_i {
         db: &mut crate::db::Database,
         options: &super::PickNoteOptions,
     ) -> crate::Result<Option<super::Note>> {
+        crate::flame_guard!("bins", "icli", "parts", "pick_note", "with_i", "execute");
         let mut all_notes = db.get_all().to_vec();
-        if all_notes.is_empty() {
-            println!("There are no notes to display!");
-            return Ok(None);
-        }
 
         if let Some(filter) = &options.filter {
             all_notes.retain(filter);
+        }
+
+        if all_notes.is_empty() {
+            println!("There are no notes to display (or none that match the given filter)!");
+            return Ok(None);
         }
 
         let compact = all_notes
@@ -194,6 +247,7 @@ pub fn execute(
     db: &mut crate::db::Database,
     backend: super::Backend,
 ) -> crate::Result<Option<Note>> {
+    crate::flame_guard!("bins", "icli", "parts", "pick_note", "execute");
     execute_with(db, backend, PickNoteOptions::default())
 }
 
@@ -203,6 +257,7 @@ pub fn execute_with(
     backend: super::Backend,
     options: PickNoteOptions,
 ) -> crate::Result<Option<Note>> {
+    crate::flame_guard!("bins", "icli", "parts", "pick_note", "execute_with");
     match backend {
         super::Backend::Dialoguer => with_d::execute(db, &options),
         super::Backend::Inquire => with_i::execute(db, &options),

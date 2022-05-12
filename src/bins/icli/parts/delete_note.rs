@@ -5,6 +5,8 @@
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 pub fn execute(db: &mut crate::db::Database, backend: super::Backend) -> crate::Result<()> {
+    crate::flame_guard!("bins", "icli", "parts", "delete_note", "execute");
+
     execute_with(db, backend, super::NoOptions::default())
 }
 
@@ -13,6 +15,8 @@ pub fn execute_with(
     backend: super::Backend,
     _options: super::NoOptions,
 ) -> crate::Result<()> {
+    crate::flame_guard!("bins", "icli", "parts", "delete_note", "execute_with");
+
     let choice = super::pick_note(db, backend)?;
     println!("Are you sure you want to delete this note?");
     super::view_note_with(db, backend, choice.clone())?;

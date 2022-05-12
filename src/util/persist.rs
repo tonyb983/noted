@@ -68,6 +68,7 @@ impl Persistence {
     where
         T: serde::de::DeserializeOwned,
     {
+        crate::flame_guard!("util", "persist", "Persistence", "load_from_bytes_default");
         Self::load_from_bytes(bytes, Self::DEFAULT_METHOD)
     }
 
@@ -82,6 +83,7 @@ impl Persistence {
     where
         T: serde::de::DeserializeOwned,
     {
+        crate::flame_guard!("util", "persist", "Persistence", "load_from_bytes");
         match method {
             Method::Json => {
                 let output: T = serde_json::from_slice(bytes)?;
@@ -120,6 +122,7 @@ impl Persistence {
     where
         T: serde::Serialize,
     {
+        crate::flame_guard!("util", "persist", "Persistence", "save_to_bytes");
         let mut bytes = Vec::with_capacity(2048);
         match method {
             Method::Json => {
@@ -160,6 +163,7 @@ impl Persistence {
     where
         T: serde::Serialize,
     {
+        crate::flame_guard!("util", "persist", "Persistence", "save_to_bytes_default");
         Self::save_to_bytes(data, Self::DEFAULT_METHOD)
     }
 
@@ -175,6 +179,7 @@ impl Persistence {
     {
         use std::fs::File;
         use std::io::Read;
+        crate::flame_guard!("util", "persist", "Persistence", "load_from_file");
         let path = path.as_ref();
 
         if !path.exists() {
@@ -224,6 +229,7 @@ impl Persistence {
     where
         T: serde::de::DeserializeOwned,
     {
+        crate::flame_guard!("util", "persist", "Persistence", "load_from_file_default");
         Self::load_from_file(path, Self::DEFAULT_METHOD)
     }
 
@@ -242,6 +248,9 @@ impl Persistence {
     {
         use std::fs::File;
         use std::io::Write;
+
+        crate::flame_guard!("util", "persist", "Persistence", "save_to_file");
+
         let path = path.as_ref();
         let mut file = File::create(path)?;
         let mut buf = std::io::BufWriter::new(file);
@@ -284,6 +293,7 @@ impl Persistence {
     where
         T: serde::Serialize,
     {
+        crate::flame_guard!("util", "persist", "Persistence", "save_to_new_file");
         if path.as_ref().exists() {
             return Err(
                 std::io::Error::new(std::io::ErrorKind::Other, "file already exists").into(),
@@ -304,6 +314,7 @@ impl Persistence {
     where
         T: serde::Serialize,
     {
+        crate::flame_guard!("util", "persist", "Persistence", "save_to_file_default");
         Self::save_to_file(data, path, Self::DEFAULT_METHOD)
     }
 
@@ -321,6 +332,7 @@ impl Persistence {
     where
         T: serde::Serialize + serde::de::DeserializeOwned,
     {
+        crate::flame_guard!("util", "persist", "Persistence", "convert_file");
         let path = path.as_ref();
         let backup = format!("{}.bak", path.display());
         std::fs::copy(path, backup)?;
@@ -343,6 +355,7 @@ impl Persistence {
     where
         T: serde::Serialize + serde::de::DeserializeOwned,
     {
+        crate::flame_guard!("util", "persist", "Persistence", "convert_bytes");
         let data: T = Self::load_from_bytes(bytes, from)?;
         Self::save_to_bytes(&data, to)
     }
@@ -362,7 +375,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg_attr(coverage, no_coverage)]
+    #[no_coverage]
     fn bytes() {
         let data = TestStruct {
             length: 10,
@@ -404,7 +417,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg_attr(coverage, no_coverage)]
+    #[no_coverage]
     fn save_and_load_file() {
         let data = TestStruct {
             length: 10,
@@ -462,7 +475,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg_attr(coverage, no_coverage)]
+    #[no_coverage]
     fn convert_bytes() {
         let data = TestStruct {
             length: 10,
@@ -497,7 +510,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg_attr(coverage, no_coverage)]
+    #[no_coverage]
     fn convert_file() {
         let data = TestStruct {
             length: 10,
@@ -556,7 +569,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg_attr(coverage, no_coverage)]
+    #[no_coverage]
     fn save_and_load_file_default() {
         let data = TestStruct {
             length: 10,
@@ -581,7 +594,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg_attr(coverage, no_coverage)]
+    #[no_coverage]
     fn method() {
         assert_eq!(Method::Json.to_string(), "json");
         assert_eq!(Method::Cbor.to_string(), "cbor");

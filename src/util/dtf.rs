@@ -8,6 +8,7 @@ use time::OffsetDateTime;
 
 #[allow(clippy::cast_sign_loss, reason = "We are verifying before casting")]
 fn abs_i64(x: i64) -> u64 {
+    crate::flame_guard!("util", "dtf", "abs_i64");
     if x < 0 {
         -x as u64
     } else {
@@ -17,11 +18,13 @@ fn abs_i64(x: i64) -> u64 {
 
 #[must_use]
 pub fn humanize_timespan_to_now(dt: OffsetDateTime) -> impl std::fmt::Display {
+    crate::flame_guard!("util", "dtf", "humanize_timespan_to_now");
     humanize_timespan_between(dt, OffsetDateTime::now_utc())
 }
 
 #[must_use]
 pub fn humanize_timespan_from_now(dt: OffsetDateTime) -> impl std::fmt::Display {
+    crate::flame_guard!("util", "dtf", "humanize_timespan_from_now");
     humanize_timespan_between(OffsetDateTime::now_utc(), dt)
 }
 
@@ -30,6 +33,7 @@ pub fn humanize_timespan_between(
     from: OffsetDateTime,
     to: OffsetDateTime,
 ) -> impl std::fmt::Display {
+    crate::flame_guard!("util", "dtf", "humanize_timespan_between");
     let diff = to - from;
     humanize_timespan(diff)
 }
@@ -49,6 +53,8 @@ pub fn humanize_timespan(dur: time::Duration) -> impl std::fmt::Display {
     const AS_DAYS: std::ops::Range<u64> = DAY..WEEK;
     const AS_WEEKS: std::ops::Range<u64> = WEEK..MONTH;
     const AS_MONTHS: std::ops::Range<u64> = MONTH..THREE_MONTHS;
+
+    crate::flame_guard!("util", "dtf", "humanize_timespan");
 
     let secs = dur.whole_seconds();
     let abs_secs = abs_i64(secs);
@@ -122,7 +128,7 @@ mod tests {
     use time::macros::datetime;
 
     #[test]
-    #[cfg_attr(coverage, no_coverage)]
+    #[no_coverage]
     fn seconds() {
         // Test "just now"
         let output = humanize_timespan_between(

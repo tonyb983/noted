@@ -11,6 +11,7 @@ use super::NoteShape;
 use tinyid::TinyId;
 
 fn validate_add_note_json(s: &str) -> Result<(), String> {
+    crate::flame_guard!("bins", "cli", "app", "validate_add_note_json");
     let converted: NoteShape = serde_json::from_str(s).map_err(|e| e.to_string())?;
     if converted.title.is_empty() && converted.content.is_empty() {
         return Err(
@@ -23,6 +24,7 @@ fn validate_add_note_json(s: &str) -> Result<(), String> {
 
 /// Arg-Name: `count`
 fn create_count_arg() -> clap::Arg<'static> {
+    crate::flame_guard!("bins", "cli", "app", "create_count_arg");
     clap::Arg::new("count")
         .help("How many results should be returned (default is all)")
         .long("count")
@@ -35,6 +37,7 @@ fn create_count_arg() -> clap::Arg<'static> {
 
 /// Arg-Name: `order`
 fn create_order_arg() -> clap::Arg<'static> {
+    crate::flame_guard!("bins", "cli", "app", "create_order_arg");
     clap::Arg::new("order")
         .help("How to order, or sort, the results.")
         .long("order")
@@ -47,6 +50,7 @@ fn create_order_arg() -> clap::Arg<'static> {
 
 /// Arg-Name: `reverse`
 fn create_reverse_arg() -> clap::Arg<'static> {
+    crate::flame_guard!("bins", "cli", "app", "create_reverse_arg");
     clap::Arg::new("reverse")
         .help("Reverse the order of the results (descending instead of ascending).")
         .long("reverse")
@@ -58,6 +62,7 @@ fn create_reverse_arg() -> clap::Arg<'static> {
 }
 
 fn add_note_cmd() -> clap::Command<'static> {
+    crate::flame_guard!("bins", "cli", "app", "add_note_cmd");
     clap::Command::new("add")
         .about("Add a new note")
         .arg(
@@ -109,10 +114,12 @@ fn add_note_cmd() -> clap::Command<'static> {
 }
 
 fn update_note_cmd() -> clap::Command<'static> {
+    crate::flame_guard!("bins", "cli", "app", "update_note_cmd");
     todo!("TODO: This")
 }
 
 fn search_notes_cmd() -> clap::Command<'static> {
+    crate::flame_guard!("bins", "cli", "app", "search_notes_cmd");
     clap::Command::new("find")
         .about("Searches through existing notes for the given text.")
         .aliases(&["search", "fd"])
@@ -142,6 +149,7 @@ fn search_notes_cmd() -> clap::Command<'static> {
 }
 
 fn list_all_cmd() -> clap::Command<'static> {
+    crate::flame_guard!("bins", "cli", "app", "list_all_cmd");
     clap::Command::new("list")
         .alias("ls")
         .about("List all notes")
@@ -151,6 +159,7 @@ fn list_all_cmd() -> clap::Command<'static> {
 }
 
 fn delete_note_cmd() -> clap::Command<'static> {
+    crate::flame_guard!("bins", "cli", "app", "delete_note_cmd");
     clap::Command::new("delete")
         .alias("del")
         .alias("remove")
@@ -168,6 +177,7 @@ fn delete_note_cmd() -> clap::Command<'static> {
 
 /// Arg-Name: `interactive`
 fn create_interactive_arg() -> clap::Arg<'static> {
+    crate::flame_guard!("bins", "cli", "app", "create_interactive_arg");
     clap::Arg::new("interactive")
         .help("Run the command in interactive mode.")
         .long_help("Attempts to perform the given subcommand interactively (if possible). Interactive commands include: add, update, delete.")
@@ -181,6 +191,7 @@ fn create_interactive_arg() -> clap::Arg<'static> {
 
 /// Arg-Name: `verbose`
 fn create_verbosity_arg() -> clap::Arg<'static> {
+    crate::flame_guard!("bins", "cli", "app", "create_verbosity_arg");
     clap::Arg::new("verbose")
         .long_help("How verbose the output should be. Can be used multiple times to increase verbosit, i.e. '-v -v' or '-vvv'.")
         .help("Run the command in verbose mode.")
@@ -193,6 +204,7 @@ fn create_verbosity_arg() -> clap::Arg<'static> {
 }
 
 pub fn create_app() -> clap::Command<'static> {
+    crate::flame_guard!("bins", "cli", "app", "create_app");
     clap::Command::new(clap::crate_name!())
         .bin_name(clap::crate_name!())
         .author(clap::crate_authors!())
@@ -220,6 +232,7 @@ mod tests {
     use pretty_assertions::{assert_eq, assert_ne, assert_str_eq};
 
     #[test]
+    #[no_coverage]
     fn clap_cmd_debug_assert() {
         add_note_cmd().debug_assert();
         list_all_cmd().debug_assert();

@@ -7,6 +7,8 @@
 use crate::types::Note;
 
 pub fn execute(db: &mut crate::db::Database, backend: super::Backend) -> crate::Result<()> {
+    crate::flame_guard!("bins", "icli", "parts", "edit_note", "execute");
+
     execute_with(db, backend, &None)
 }
 
@@ -23,6 +25,8 @@ pub fn execute_with(
         "Touch",
         "Exit",
     ];
+    crate::flame_guard!("bins", "icli", "parts", "edit_note", "execute_with");
+
     let mut note = match options {
         Some(n) => n.clone(),
         None => {
@@ -54,6 +58,7 @@ pub fn execute_with(
 }
 
 fn edit_title(note: &mut Note, backend: super::Backend) -> crate::Result<bool> {
+    crate::flame_guard!("bins", "icli", "parts", "edit_note", "edit_title");
     let title = backend.text("Title:", Some(note.title()))?;
     note.set_title(&title);
     Ok(note.dirty())
@@ -68,6 +73,8 @@ fn edit_content(note: &mut Note, backend: super::Backend) -> crate::Result<bool>
         },
         Result,
     };
+    crate::flame_guard!("bins", "icli", "parts", "edit_note", "edit_content");
+    // TODO: Change this to use the function on `backend`
     let content = {
         let stdout = std::io::stdout();
         let mut lock = stdout.lock();
@@ -99,6 +106,7 @@ fn edit_tags(note: &mut Note, backend: super::Backend) -> crate::Result<bool> {
         "Clear All Tags",
         "Exit",
     ];
+    crate::flame_guard!("bins", "icli", "parts", "edit_note", "edit_tags");
 
     let mut tags = note.tags().to_vec();
 
@@ -140,6 +148,7 @@ fn edit_tags(note: &mut Note, backend: super::Backend) -> crate::Result<bool> {
 }
 
 fn touch(note: &mut Note) -> crate::Result<bool> {
+    crate::flame_guard!("bins", "icli", "parts", "edit_note", "touch");
     note.touch();
     Ok(note.dirty())
 }

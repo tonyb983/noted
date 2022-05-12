@@ -19,6 +19,8 @@ pub enum MenuOptions {
 
 impl MenuOptions {
     pub fn all() -> &'static [Self] {
+        crate::flame_guard!("bins", "icli", "parts", "menu", "MenuOptions", "all");
+
         &[
             Self::CreateNote,
             Self::ViewNote,
@@ -33,6 +35,14 @@ impl MenuOptions {
 
 impl From<MenuOptions> for usize {
     fn from(opt: MenuOptions) -> Self {
+        crate::flame_guard!(
+            "bins",
+            "icli",
+            "parts",
+            "menu",
+            "MenuOptions",
+            "usize::from(MenuOptions)"
+        );
         match opt {
             MenuOptions::CreateNote => 0,
             MenuOptions::ViewNote => 1,
@@ -47,6 +57,14 @@ impl From<MenuOptions> for usize {
 
 impl From<usize> for MenuOptions {
     fn from(i: usize) -> Self {
+        crate::flame_guard!(
+            "bins",
+            "icli",
+            "parts",
+            "menu",
+            "MenuOptions",
+            "MenuOptions::from(usize)"
+        );
         match i {
             0 => MenuOptions::CreateNote,
             1 => MenuOptions::ViewNote,
@@ -61,6 +79,14 @@ impl From<usize> for MenuOptions {
 
 impl AsRef<str> for MenuOptions {
     fn as_ref(&self) -> &str {
+        crate::flame_guard!(
+            "bins",
+            "icli",
+            "parts",
+            "menu",
+            "MenuOptions",
+            "MenuOptions::as_ref(str)"
+        );
         match self {
             MenuOptions::CreateNote => "Create Note",
             MenuOptions::ViewNote => "View Note",
@@ -80,6 +106,7 @@ impl std::fmt::Display for MenuOptions {
 }
 
 pub fn execute(backend: super::Backend) -> crate::Result<MenuOptions> {
+    crate::flame_guard!("bins", "icli", "parts", "menu", "execute");
     backend.select("Operations:", MenuOptions::all())
 }
 

@@ -162,6 +162,7 @@ mod tests {
     use pretty_assertions::{assert_eq, assert_ne, assert_str_eq};
 
     #[test]
+    #[no_coverage]
     fn all_variants() {
         let mut zom = OneOrMore::one(0usize);
         assert_eq!(zom.count(), 1);
@@ -179,6 +180,7 @@ mod tests {
     }
 
     #[test]
+    #[no_coverage]
     fn conv() {
         let mut zom: OneOrMore<_> = 0usize.into();
         assert_eq!(zom.count(), 1);

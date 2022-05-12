@@ -14,7 +14,10 @@ use time::OffsetDateTime;
 use tinyid::TinyId;
 use uuid::Uuid;
 
-use crate::types::{CreateNote, DeleteNote, UpdateNote};
+use crate::{
+    flame_guard,
+    types::{CreateNote, DeleteNote, UpdateNote},
+};
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Note {
@@ -40,6 +43,7 @@ impl Note {
         created: OffsetDateTime,
         updated: OffsetDateTime,
     ) -> Self {
+        flame_guard!("types", "Note", "existing");
         Note {
             id,
             title,
@@ -54,6 +58,7 @@ impl Note {
 
     #[must_use]
     pub fn create(dto: impl Into<CreateNote>) -> Self {
+        flame_guard!("types", "Note", "create");
         let (title, content, tags) = dto.into().into_parts();
         Self {
             id: TinyId::random(),
@@ -69,6 +74,7 @@ impl Note {
 
     #[must_use]
     pub fn create_for(db: &crate::db::Database, dto: impl Into<CreateNote>) -> Self {
+        flame_guard!("types", "Note", "create_for");
         let (title, content, tags) = dto.into().into_parts();
         Self {
             id: db.create_id(),
@@ -83,6 +89,7 @@ impl Note {
     }
 
     pub fn update(&mut self, dto: impl Into<UpdateNote>) -> bool {
+        flame_guard!("types", "Note", "update");
         let (id, title, content, tags) = dto.into().into_parts();
 
         if id != self.id {
@@ -114,6 +121,7 @@ impl Note {
     }
 
     pub fn update_from(&mut self, other: &Note) {
+        flame_guard!("types", "Note", "update_from");
         if self.id != other.id {
             return;
         }
@@ -128,6 +136,7 @@ impl Note {
     }
 
     pub fn delete(&mut self, dto: impl Into<DeleteNote>) -> bool {
+        flame_guard!("types", "Note", "delete");
         let id = *dto.into().id();
         if self.id == id {
             self.dirty = true;
@@ -139,15 +148,18 @@ impl Note {
 
     #[must_use]
     pub fn id(&self) -> TinyId {
+        flame_guard!("types", "Note", "id");
         self.id
     }
 
     #[must_use]
     pub fn title(&self) -> &str {
+        flame_guard!("types", "Note", "title");
         &self.title
     }
 
     pub fn set_title(&mut self, title: &str) {
+        flame_guard!("types", "Note", "set_title");
         if self.title != title {
             self.title = title.to_string();
             self.set_updated_now();
@@ -156,6 +168,7 @@ impl Note {
     }
 
     pub fn update_title(&mut self, f: impl FnOnce(&str) -> String) {
+        flame_guard!("types", "Note", "update_title");
         let new = f(&self.title);
         if new != self.title {
             self.title = new;
@@ -166,10 +179,12 @@ impl Note {
 
     #[must_use]
     pub fn content(&self) -> &str {
+        flame_guard!("types", "Note", "content");
         &self.content
     }
 
     pub fn set_content(&mut self, content: &str) {
+        flame_guard!("types", "Note", "set_content");
         if self.content != content {
             self.content = content.to_string();
             self.set_updated_now();
@@ -178,6 +193,7 @@ impl Note {
     }
 
     pub fn update_content(&mut self, f: impl FnOnce(&str) -> String) {
+        flame_guard!("types", "Note", "update_content");
         let new = f(&self.content);
         if new != self.content {
             self.content = new;
@@ -187,6 +203,7 @@ impl Note {
     }
 
     pub fn append_content(&mut self, content: &str) {
+        flame_guard!("types", "Note", "append_content");
         if !content.is_empty() {
             if !self.content().ends_with(' ') && !content.starts_with(' ') {
                 self.content.push(' ');
@@ -199,10 +216,12 @@ impl Note {
 
     #[must_use]
     pub fn tags(&self) -> &[String] {
+        flame_guard!("types", "Note", "tags");
         &self.tags
     }
 
     pub fn set_tags(&mut self, mut tags: Vec<String>) {
+        flame_guard!("types", "Note", "set_tags");
         tags.sort_unstable();
         tags.dedup();
         if self.tags != tags {
@@ -213,11 +232,13 @@ impl Note {
     }
 
     pub fn update_tags(&mut self, f: impl FnOnce(&[String]) -> Vec<String>) {
+        flame_guard!("types", "Note", "update_tags");
         let new = f(&self.tags);
         self.set_tags(new);
     }
 
     pub fn add_tag(&mut self, tag: String) {
+        flame_guard!("types", "Note", "add_tag");
         if !self.tags.contains(&tag) {
             self.tags.push(tag);
             self.set_updated_now();
@@ -226,6 +247,7 @@ impl Note {
     }
 
     pub fn remove_tag(&mut self, tag: &str) {
+        flame_guard!("types", "Note", "remove_tag");
         if let Some(index) = self.tags.iter().position(|t| t == tag) {
             self.tags.remove(index);
             self.set_updated_now();
@@ -235,89 +257,100 @@ impl Note {
 
     #[must_use]
     pub fn created(&self) -> &OffsetDateTime {
+        flame_guard!("types", "Note", "created");
         &self.created
     }
 
     #[must_use]
     pub fn created_humanized(&self) -> impl std::fmt::Display {
+        flame_guard!("types", "Note", "created_humanized");
         crate::util::dtf::humanize_timespan_to_now(self.created)
     }
 
     #[must_use]
     pub fn updated(&self) -> &OffsetDateTime {
+        flame_guard!("types", "Note", "updated");
         &self.updated
     }
 
     #[must_use]
     pub fn updated_humanized(&self) -> impl std::fmt::Display {
+        flame_guard!("types", "Note", "updated_humanized");
         crate::util::dtf::humanize_timespan_to_now(self.updated)
     }
 
     #[must_use]
     pub fn dirty(&self) -> bool {
+        flame_guard!("types", "Note", "dirty");
         self.dirty
     }
 
     pub fn set_dirty(&mut self, dirty: bool) {
+        flame_guard!("types", "Note", "set_dirty");
         self.dirty = dirty;
     }
 
     #[must_use]
     pub fn pending_delete(&self) -> bool {
+        flame_guard!("types", "Note", "pending_delete");
         self.pending_delete
     }
 
     pub fn set_pending_delete(&mut self, pending_delete: bool) {
+        flame_guard!("types", "Note", "set_pending_delete");
         self.pending_delete = pending_delete;
     }
 
     #[must_use]
     pub fn title_contains(&self, text: &str) -> bool {
+        flame_guard!("types", "Note", "title_contains");
         self.title.contains(text)
     }
 
     #[must_use]
     pub fn title_matches(&self, text: &str) -> bool {
+        flame_guard!("types", "Note", "title_matches");
         self.title == text
     }
 
     #[must_use]
     pub fn content_contains(&self, text: &str) -> bool {
+        flame_guard!("types", "Note", "content_contains");
         self.content.contains(text)
     }
 
     #[must_use]
     pub fn content_matches(&self, text: &str) -> bool {
+        flame_guard!("types", "Note", "content_matches");
         self.content == text
     }
 
     #[must_use]
     pub fn tag_contains(&self, text: &str) -> bool {
+        flame_guard!("types", "Note", "tag_contains");
         self.tags.iter().any(|tag| tag.contains(text))
     }
 
     #[must_use]
     pub fn tag_matches(&self, text: &str) -> bool {
+        flame_guard!("types", "Note", "tag_matches");
         self.tags.iter().any(|tag| tag == text)
     }
 
     #[must_use]
-    pub fn tag_contains_mt(&self, text: &str) -> bool {
-        use rayon::iter::ParallelIterator;
-        self.tags.par_iter().any(|tag| tag.contains(text))
-    }
-
-    #[must_use]
     pub fn full_text_search(&self, text: &str) -> bool {
+        flame_guard!("types", "Note", "full_text_search");
         self.title_contains(text) || self.content_contains(text) || self.tag_contains(text)
     }
 
     pub(crate) fn clear_flags(&mut self) {
+        flame_guard!("types", "Note", "clear_flags");
         self.dirty = false;
         self.pending_delete = false;
     }
 
     pub(crate) fn make_invalid(&mut self) {
+        flame_guard!("types", "Note", "make_invalid");
         self.id = TinyId::null();
         self.dirty = false;
         self.pending_delete = false;
@@ -329,11 +362,13 @@ impl Note {
     }
 
     pub fn touch(&mut self) {
+        flame_guard!("types", "Note", "touch");
         self.set_updated_now();
         self.set_dirty(true);
     }
 
     fn set_updated_now(&mut self) {
+        flame_guard!("types", "Note", "set_updated_now");
         self.updated = OffsetDateTime::now_utc();
     }
 }
@@ -369,10 +404,12 @@ impl PartialEq<Note> for Note {
 mod tests {
     use super::*;
 
+    #[no_coverage]
     fn make_one_note() -> Note {
         Note::create(("title", "content", vec!["tag1", "tag2", "tag3"]))
     }
 
+    #[no_coverage]
     fn make_four_notes() -> Vec<Note> {
         vec![
             Note::create(("title1", "content1", vec!["tag1", "tag2", "something"])),
@@ -402,6 +439,7 @@ mod tests {
         ]
     }
 
+    #[no_coverage]
     fn big_tag_list_note() -> Note {
         let mut note = Note::create(("Title", "This is some content."));
         for i in 0..100 {
@@ -410,67 +448,8 @@ mod tests {
         note
     }
 
-    #[allow(clippy::similar_names)]
     #[test]
-    #[ignore]
-    fn tag_contains_compare() {
-        use std::time::{Duration, Instant};
-        let total_now = Instant::now();
-
-        let note = big_tag_list_note();
-
-        let now = Instant::now();
-        let st_has_10 = note.tag_contains("tag10");
-        let st_early_elapsed = now.elapsed();
-
-        let now = Instant::now();
-        let st_has_99 = note.tag_contains("tag99");
-        let st_last_elapsed = now.elapsed();
-
-        let now = Instant::now();
-        let st_has_100 = note.tag_contains("tag100");
-        let st_none_elapsed = now.elapsed();
-
-        let now = Instant::now();
-        let mt_has_10 = note.tag_contains_mt("tag10");
-        let mt_early_elapsed = now.elapsed();
-
-        let now = Instant::now();
-        let mt_has_99 = note.tag_contains_mt("tag99");
-        let mt_last_elapsed = now.elapsed();
-
-        let now = Instant::now();
-        let mt_has_100 = note.tag_contains_mt("tag100");
-        let mt_none_elapsed = now.elapsed();
-
-        let total_elapsed = total_now.elapsed();
-        println!("Completed in {:?} total.", total_elapsed);
-        println!("Results comparing tag_contains and tag_contains_mt.");
-        println!("Single Threaded:");
-        println!(
-            "\tHas tag10  is {}. Took {:?}.",
-            st_has_10, st_early_elapsed
-        );
-        println!("\tHas tag99  is {}. Took {:?}.", st_has_99, st_last_elapsed);
-        println!(
-            "\tHas tag100 is {}. Took {:?}.",
-            st_has_100, st_none_elapsed
-        );
-        println!();
-
-        println!("Multi Threaded:");
-        println!(
-            "\tHas tag10  is {}. Took {:?}.",
-            mt_has_10, mt_early_elapsed
-        );
-        println!("\tHas tag99  is {}. Took {:?}.", mt_has_99, mt_last_elapsed);
-        println!(
-            "\tHas tag100 is {}. Took {:?}.",
-            mt_has_100, mt_none_elapsed
-        );
-    }
-
-    #[test]
+    #[no_coverage]
     fn mutations() {
         let mut note = make_one_note();
         note.clear_flags();

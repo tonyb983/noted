@@ -36,6 +36,7 @@ enum CliVerbosity {
 
 impl std::fmt::Display for CliVerbosity {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        crate::flame_guard!("bins", "cli", "CliVerbosity", "fmt");
         match self {
             CliVerbosity::Quiet => write!(f, "quiet"),
             CliVerbosity::Normal => write!(f, "normal"),
@@ -47,6 +48,7 @@ impl std::fmt::Display for CliVerbosity {
 
 impl From<u64> for CliVerbosity {
     fn from(value: u64) -> Self {
+        crate::flame_guard!("bins", "cli", "CliVerbosity", "CliVerbosity::from(usize)");
         match value {
             0 => CliVerbosity::Quiet,
             1 => CliVerbosity::Normal,
@@ -63,6 +65,7 @@ impl From<u64> for CliVerbosity {
 #[allow(clippy::too_many_lines, reason = "WIP")]
 pub fn run_cli(args: std::env::Args) -> crate::Result {
     use crate::types::api::StringSearch;
+    crate::flame_guard!("bins", "cli", "run_cli");
 
     println!("Noted CLI. Args: {}", args.collect::<Vec<_>>().join(" "));
     // let mut app = app::create_app();
@@ -184,11 +187,14 @@ pub fn run_cli(args: std::env::Args) -> crate::Result {
 
     // TODO: Pretty print the results
 
+    crate::flame_dump!(html);
+
     Ok(())
 }
 
 fn parse_order_count(args: &clap::ArgMatches) -> (Ordering, Count) {
     use crate::types::api::OrderBy;
+    crate::flame_guard!("bins", "cli", "parse_order_count");
     let order_str = args.value_of("order").expect("order is always present");
     let mut ordering = Ordering::ascending(match order_str {
         "title" => OrderBy::Title,

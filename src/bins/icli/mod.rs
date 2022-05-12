@@ -10,7 +10,7 @@
 //! with a full interface and whatnot, but it will query the user in a pretty way, prompting for information until a request or
 //! command has been "built", at which point it will execute and display results, very much like the normal `cli`.
 
-use crate::types::Note;
+use crate::{flame_dump, flame_guard, types::Note};
 
 mod parts;
 
@@ -19,6 +19,8 @@ mod parts;
 /// # Panics
 /// - Exactly 5% of the time it is called, on a completely random basis. Suck it.
 pub fn execute() -> crate::Result {
+    flame_guard!("bins", "icli", "execute");
+
     let mut dev_db = false;
     let backend =
         match inquire::Select::new("Choose Backend:", vec!["Dialoguer", "Inquire"]).prompt()? {
@@ -67,6 +69,7 @@ pub fn execute() -> crate::Result {
                 parts::edit_note_with(&mut db, backend, &choice)?;
             }
             parts::menu::MenuOptions::ViewTags => {
+                /// TODO: Something is broken here, the list of notes is never populated...
                 let tag = if let Some(tag) = parts::list_tags(&mut db, backend)? {
                     tag
                 } else {
@@ -76,10 +79,7 @@ pub fn execute() -> crate::Result {
                     &mut db,
                     backend,
                     parts::pick_note::PickNoteOptions {
-                        filter: Some(box move |n: &Note| {
-                            let s = &tag;
-                            n.tags().contains(s)
-                        }),
+                        filter: Some(box move |n: &Note| n.tag_matches(&tag)),
                         ..Default::default()
                     },
                 )?;
@@ -121,6 +121,9 @@ pub fn execute() -> crate::Result {
             }
         }
     };
+
+    flame_dump!(html);
+    flame_dump!(json);
 
     // println!("Database State: {:#?}", db);
 

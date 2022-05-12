@@ -70,6 +70,8 @@ mod tests {
     use super::*;
 
     #[test]
+    #[ignore]
+    #[no_coverage]
     fn temp() {
         #[derive(Debug)]
         enum TestError {
@@ -96,21 +98,21 @@ mod tests {
             }
         }
 
-        let vs: Vec<ValidatorFunc<u64, String>> = vec![
-            Box::new(|x| {
-                if *x > 0 {
-                    Ok(())
-                } else {
-                    Err("Must be greater than 0".to_string())
-                }
-            }),
-            Box::new(|x| {
-                if *x < 100 {
-                    Ok(())
-                } else {
-                    Err("Must be less than 100".to_string())
-                }
-            }),
-        ];
+        // let vs: Vec<ValidatorFunc<u64, String>> = vec![
+        //     Box::new(|x| {
+        //         if *x > 0 {
+        //             Ok(())
+        //         } else {
+        //             Err("Must be greater than 0".to_string())
+        //         }
+        //     }),
+        //     Box::new(|x| {
+        //         if *x < 100 {
+        //             Ok(())
+        //         } else {
+        //             Err("Must be less than 100".to_string())
+        //         }
+        //     }),
+        // ];
     }
 }

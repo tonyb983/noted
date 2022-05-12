@@ -246,6 +246,7 @@ impl NoteFilter {
 impl NoteFilter {
     #[must_use]
     pub fn predicate(&self) -> Predicate {
+        crate::flame_guard!("types", "api", "filter", "NoteFilter", "predicate");
         match self {
             NoteFilter::String(field, ss) => {
                 let field = *field;
@@ -287,23 +288,23 @@ impl NoteFilter {
             NoteFilter::Date(field, ds) => {
                 let field = *field;
                 match *ds {
-                    DateSearch::Before(other) => box move |note| {
+                    DateSearch::Before(other) => box move |&note| {
                         let value = *field.get_value(note);
                         value < other
                     },
-                    DateSearch::After(other) => box move |note| {
+                    DateSearch::After(other) => box move |&note| {
                         let value = *field.get_value(note);
                         value > other
                     },
-                    DateSearch::On(other) => box move |note| {
+                    DateSearch::On(other) => box move |&note| {
                         let value = *field.get_value(note);
                         value == other
                     },
-                    DateSearch::Between(a, b) => box move |note| {
+                    DateSearch::Between(a, b) => box move |&note| {
                         let value = *field.get_value(note);
                         value >= a && value <= b
                     },
-                    DateSearch::NotBetween(a, b) => box move |note| {
+                    DateSearch::NotBetween(a, b) => box move |&note| {
                         let value = *field.get_value(note);
                         value < a || value > b
                     },
@@ -395,6 +396,7 @@ pub struct Filter {
 impl Filter {
     #[must_use]
     pub fn empty() -> Self {
+        crate::flame_guard!("types", "api", "filter", "Filter", "empty");
         Self {
             filters: Vec::new(),
         }
@@ -402,6 +404,7 @@ impl Filter {
 
     #[must_use]
     pub fn single(filter: NoteFilter) -> Self {
+        crate::flame_guard!("types", "api", "filter", "Filter", "single");
         Self {
             filters: vec![filter],
         }
@@ -409,6 +412,7 @@ impl Filter {
 
     #[must_use]
     pub fn multiple(filters: Vec<NoteFilter>) -> Self {
+        crate::flame_guard!("types", "api", "filter", "Filter", "multiple");
         Self { filters }
     }
 }
@@ -416,34 +420,40 @@ impl Filter {
 /// Member Functions
 impl Filter {
     pub fn add_filter(&mut self, filter: NoteFilter) {
+        crate::flame_guard!("types", "api", "filter", "Filter", "add_filter");
         self.filters.push(filter);
     }
 
     #[must_use]
     pub fn with_filter(mut self, filter: NoteFilter) -> Self {
+        crate::flame_guard!("types", "api", "filter", "Filter", "with_filter");
         self.add_filter(filter);
         self
     }
 
     #[must_use]
     pub fn with_string_filter(mut self, field: NoteStringField, search: StringSearch) -> Self {
+        crate::flame_guard!("types", "api", "filter", "Filter", "with_string_filter");
         self.filters.push(NoteFilter::String(field, search));
         self
     }
 
     #[must_use]
     pub fn with_date_filter(mut self, field: NoteDateField, search: DateSearch) -> Self {
+        crate::flame_guard!("types", "api", "filter", "Filter", "with_date_filter");
         self.filters.push(NoteFilter::Date(field, search));
         self
     }
 
     #[must_use]
     pub fn filters(&self) -> &[NoteFilter] {
+        crate::flame_guard!("types", "api", "filter", "Filter", "filters");
         &self.filters
     }
 
     #[must_use]
     pub fn predicate(&self) -> Predicate {
+        crate::flame_guard!("types", "api", "filter", "Filter", "predicate");
         if self.filters.is_empty() {
             return box |_| true;
         }
@@ -504,6 +514,7 @@ mod tests {
 
     use super::*;
 
+    #[no_coverage]
     fn create_notes() -> Vec<Note> {
         vec![
             Note::create((
@@ -539,6 +550,7 @@ mod tests {
         ]
     }
 
+    #[no_coverage]
     fn fake_repo_get(notes: &[Note], filter: &Filter, order: Ordering, count: Count) -> Vec<Note> {
         let mut notes = notes.to_vec();
         notes.sort_unstable_by(order.comparison());
@@ -550,24 +562,29 @@ mod tests {
             .collect()
     }
 
+    #[no_coverage]
     fn apply_filter(notes: &[Note], filter: &NoteFilter) -> Vec<Note> {
         notes.iter().filter(filter.predicate()).cloned().collect()
     }
 
+    #[no_coverage]
     fn apply_filters(notes: &[Note], filter: &Filter) -> Vec<Note> {
         notes.iter().filter(filter.predicate()).cloned().collect()
     }
 
+    #[no_coverage]
     fn apply_order(notes: &[Note], order: Ordering) -> Vec<Note> {
         let mut notes = notes.to_vec();
         notes.sort_unstable_by(order.comparison());
         notes
     }
 
+    #[no_coverage]
     fn apply_count(notes: &[Note], count: Count) -> Vec<Note> {
         notes.iter().take(count.to_usize()).cloned().collect()
     }
 
+    #[no_coverage]
     fn print_titles(notes: &[Note], linebreak: bool) {
         let titles = notes.iter().map(Note::title).collect::<Vec<_>>();
         if linebreak {
@@ -578,6 +595,7 @@ mod tests {
     }
 
     #[test]
+    #[no_coverage]
     fn filter_misc() {
         let notes = create_notes();
         assert_eq!(notes.len(), 6, "create_notes should create 6 notes");
@@ -590,6 +608,7 @@ mod tests {
     }
 
     #[test]
+    #[no_coverage]
     fn filter_title() {
         let notes = create_notes();
         assert_eq!(notes.len(), 6, "create_notes should create 6 notes");
@@ -651,6 +670,7 @@ mod tests {
     }
 
     #[test]
+    #[no_coverage]
     fn filter_content() {
         let notes = create_notes();
         assert_eq!(notes.len(), 6, "create_notes should create 6 notes");
@@ -701,6 +721,7 @@ mod tests {
     }
 
     #[test]
+    #[no_coverage]
     fn filter_created() {
         let notes = create_notes();
         assert_eq!(notes.len(), 6, "create_notes should create 6 notes");
@@ -739,6 +760,7 @@ mod tests {
     }
 
     #[test]
+    #[no_coverage]
     fn filter_updated() {
         let mut notes = create_notes();
         assert_eq!(notes.len(), 6, "create_notes should create 6 notes");
@@ -787,6 +809,7 @@ mod tests {
     }
 
     #[test]
+    #[no_coverage]
     fn count() {
         let notes = create_notes();
         assert_eq!(notes.len(), 6, "create_notes should create 6 notes");
@@ -811,6 +834,7 @@ mod tests {
     }
 
     #[test]
+    #[no_coverage]
     fn ordering() {
         use super::super::order::{OrderBy, OrderDirection, Ordering};
 

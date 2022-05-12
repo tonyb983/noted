@@ -22,10 +22,26 @@ impl<'s> CompactNote<'s> {
     }
 
     pub fn to_string_single(&self) -> impl std::fmt::Display {
+        crate::flame_guard!(
+            "bins",
+            "icli",
+            "parts",
+            "list_notes",
+            "CompactNote",
+            "to_string_single"
+        );
         format!("ID: {} | Title: {}", self.id, self.title)
     }
 
     pub fn to_string_multiple(&self) -> impl std::fmt::Display {
+        crate::flame_guard!(
+            "bins",
+            "icli",
+            "parts",
+            "list_notes",
+            "CompactNote",
+            "to_string_multiple"
+        );
         format!("ID: {}\nTitle: {}", self.id, self.title)
     }
 }
@@ -40,6 +56,7 @@ mod with_d {
     use dialoguer::{theme::ColorfulTheme, Select};
 
     pub fn execute(db: &mut crate::db::Database) -> crate::Result<Option<super::Note>> {
+        crate::flame_guard!("bins", "icli", "parts", "list_notes", "with_d", "execute");
         let all_notes = db.get_all().to_vec();
         if all_notes.is_empty() {
             println!("There are no notes to display!");
@@ -65,6 +82,7 @@ mod with_i {
     use crate::types::Note;
 
     pub fn execute(db: &mut crate::db::Database) -> crate::Result<Option<super::Note>> {
+        crate::flame_guard!("bins", "icli", "parts", "list_notes", "with_i", "execute");
         let all_notes = db.get_all().to_vec();
         if all_notes.is_empty() {
             println!("There are no notes to display!");
@@ -84,6 +102,7 @@ pub fn execute(
     db: &mut crate::db::Database,
     backend: super::Backend,
 ) -> crate::Result<Option<Note>> {
+    crate::flame_guard!("bins", "icli", "parts", "list_notes", "execute");
     match backend {
         super::Backend::Dialoguer => with_d::execute(db),
         super::Backend::Inquire => with_i::execute(db),

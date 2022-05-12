@@ -39,6 +39,7 @@ pub enum Backend {
 
 impl Backend {
     pub fn select_str<'s>(self, prompt: &'_ str, items: &'s [&'s str]) -> crate::Result<&'s str> {
+        crate::flame_guard!("bins", "icli", "parts", "Backend", "select_str");
         match self {
             Backend::Dialoguer => {
                 let idx =
@@ -60,6 +61,7 @@ impl Backend {
         prompt: &str,
         items: &[T],
     ) -> crate::Result<T> {
+        crate::flame_guard!("bins", "icli", "parts", "Backend", "select");
         match self {
             Backend::Dialoguer => {
                 let idx =
@@ -77,6 +79,7 @@ impl Backend {
     }
 
     pub fn confirm(self, prompt: &'_ str) -> crate::Result<bool> {
+        crate::flame_guard!("bins", "icli", "parts", "Backend", "confirm");
         match self {
             Backend::Dialoguer => {
                 let choice =
@@ -93,6 +96,7 @@ impl Backend {
     }
 
     pub fn text(self, prompt: &str, starting_value: Option<&str>) -> crate::Result<String> {
+        crate::flame_guard!("bins", "icli", "parts", "Backend", "text");
         match self {
             Backend::Dialoguer => {
                 if let Some(s) = starting_value {
@@ -140,6 +144,7 @@ impl Backend {
             },
             Result,
         };
+        crate::flame_guard!("bins", "icli", "parts", "Backend", "multiline_text");
         let stdout = std::io::stdout();
         let mut lock = stdout.lock();
 
@@ -160,6 +165,7 @@ impl Backend {
     }
 
     pub fn text_array(self, prompt: &str) -> crate::Result<Vec<String>> {
+        crate::flame_guard!("bins", "icli", "parts", "Backend", "text_array");
         let mut ts = Vec::new();
         loop {
             let tag = self.text(prompt, None)?;
