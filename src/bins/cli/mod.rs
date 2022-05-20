@@ -187,7 +187,7 @@ pub fn run_cli(args: std::env::Args) -> crate::Result {
 
     // TODO: Pretty print the results
 
-    crate::flame_dump!(html);
+    crate::flame_dump!(html, "cli");
 
     Ok(())
 }

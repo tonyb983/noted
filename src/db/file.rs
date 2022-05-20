@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 use tinyid::TinyId;
 use uuid::Uuid;
 
-#[cfg(feature = "flame_on")]
+#[cfg(feature = "flame")]
 use flamer::flame as flame_fn;
 
 use crate::{
@@ -47,7 +47,7 @@ pub struct Database {
 impl Database {
     #[must_use]
     pub fn empty() -> Self {
-        flame_guard!("db", "file", "Database", "empty");
+        crate::profile_guard!("empty", "db::file::Database");
         
         Database {
             notes: Vec::new(),
@@ -61,7 +61,7 @@ impl Database {
     /// - [`DatabaseError::InvalidId`] if the given notes contains an invalid ID.
     /// - [`DatabaseError::InvalidState`] if a list of IDs cannot be built from the list of notes, usually indicating that the notes contain duplicate or invalid ids.
     pub fn from_notes(notes: &[Note]) -> Result<Self> {
-        flame_guard!("db", "file", "Database", "from_notes");
+        crate::profile_guard!("from_notes", "db::file::Database");
 
         let mut db = Database {
             notes: notes.to_vec(),
@@ -77,7 +77,7 @@ impl Database {
     /// - [`DatabaseError::InvalidId`] if the given notes contains an invalid ID.
     /// - [`DatabaseError::InvalidState`] if a list of IDs cannot be built from the list of notes, usually indicating that the notes contain duplicate or invalid ids.
     pub fn from_notes_vec(notes: Vec<Note>) -> Result<Self> {
-        flame_guard!("db", "file", "Database", "from_notes_vec");
+        crate::profile_guard!("from_notes_vec", "db::file::Database");
 
         let ids = notes.iter().map(Note::id).collect();
         let mut db = Database { notes, ids };
@@ -92,7 +92,7 @@ impl Database {
     /// - [`DatabaseError::InvalidState`] if a list of IDs cannot be built from the list of notes, usually indicating that the notes contain duplicate or invalid ids.
     /// - Forwards any errors from [`Persistence::load_from_bytes_default`].
     pub fn load_from_bytes(bytes: &[u8]) -> Result<Self> {
-        flame_guard!("db", "file", "Database", "load_from_bytes");
+        crate::profile_guard!("load_from_bytes", "db::file::Database");
 
         Persistence::load_from_bytes_default(bytes)
     }
@@ -104,7 +104,7 @@ impl Database {
     /// - [`DatabaseError::InvalidState`] if a list of IDs cannot be built from the list of notes, usually indicating that the notes contain duplicate or invalid ids.
     /// - Forwards any errors from [`Persistence::load_from_file_default`].
     pub fn load<P: AsRef<Path>>(path: P) -> Result<Self> {
-        flame_guard!("db", "file", "Database", "load");
+        crate::profile_guard!("load", "db::file::Database");
 
         let mut db: Self = Persistence::load_from_file_default(path)?;
         db.init()?;
@@ -122,7 +122,7 @@ impl Database {
     /// ## Errors
     /// - See [`Persistence::save_to_file_default`].
     pub fn save<P: AsRef<Path>>(&self, path: P) -> Result {
-        flame_guard!("db", "file", "Database", "save");
+        crate::profile_guard!("save", "db::file::Database");
 
         Persistence::save_to_file_default(self, path)
     }
@@ -132,7 +132,7 @@ impl Database {
     /// ## Errors
     /// - See [`Database::apply_create`], [`Database::apply_update`], and [`Database::apply_delete`].
     pub fn apply_dto(&mut self, dto: impl Into<NoteDto>) -> Result<DtoResponse> {
-        flame_guard!("db", "file", "Database", "apply_dto");
+        crate::profile_guard!("apply_dto", "db::file::Database");
 
         match dto.into() {
             NoteDto::Create(create_note) => {
@@ -153,7 +153,7 @@ impl Database {
     /// ## Errors
     /// - [`DatabaseError::DuplicateId`] if the given ID is already contained in this [`Database`].
     pub fn apply_create(&mut self, create: impl Into<CreateNote>) -> Result<Note> {
-        flame_guard!("db", "file", "Database", "apply_create");
+        crate::profile_guard!("apply_create", "db::file::Database");
 
         let create = create.into();
         let note = Note::create_for(self, create);
@@ -172,7 +172,7 @@ impl Database {
     /// ## Errors
     /// - [`DatabaseError::IdNotFound`] if the given ID is not found in this [`Database`].
     pub fn apply_update(&mut self, update: impl Into<UpdateNote>) -> Result<bool> {
-        flame_guard!("db", "file", "Database", "apply_update");
+        crate::profile_guard!("apply_update", "db::file::Database");
 
         let update = update.into();
         let mut note = self
@@ -190,7 +190,7 @@ impl Database {
     /// ## Errors
     /// - [`DatabaseError::IdNotFound`] if the given ID is not found in this [`Database`].
     pub fn apply_delete(&mut self, delete: impl Into<DeleteNote>) -> Result<bool> {
-        flame_guard!("db", "file", "Database", "apply_delete");
+        crate::profile_guard!("apply_delete", "db::file::Database");
 
         let id = *delete.into().id();
         let start = self.notes.len();
@@ -208,7 +208,7 @@ impl Database {
     /// or pending deletions that are detected. This call will reset the flags on
     /// each [`Note`], which is why it requires a mutable reference to each.
     pub fn ensure_sync(&mut self, notes: &mut [Note]) {
-        flame_guard!("db", "file", "Database", "ensure_sync");
+        crate::profile_guard!("ensure_sync", "db::file::Database");
 
         for note in notes.iter_mut() {
             if note.pending_delete() {
@@ -228,7 +228,7 @@ impl Database {
     }
 
     pub fn ensure_sync_v2<'n>(&mut self, input: impl Into<OneOrMore<&'n mut Note>>) {
-        flame_guard!("db", "file", "Database", "ensure_sync_v2");
+        crate::profile_guard!("ensure_sync_v2", "db::file::Database");
         
         let input = input.into();
         for note in input.into_values() {
@@ -253,7 +253,7 @@ impl Database {
     /// ## Errors
     /// - [`DatabaseError::IdNotFound`] if the given ID is not found in this [`Database`].
     pub fn get(&self, id: TinyId) -> Result<&Note> {
-        flame_guard!("db", "file", "Database", "get");
+        crate::profile_guard!("get", "db::file::Database");
         
         self.notes
             .iter()
@@ -266,7 +266,7 @@ impl Database {
     /// ## Errors
     /// - [`DatabaseError::IdNotFound`] if the given ID is not found in this [`Database`].
     pub fn get_clone(&self, id: TinyId) -> Result<Note> {
-        flame_guard!("db", "file", "Database", "get_clone");
+        crate::profile_guard!("get_clone", "db::file::Database");
         
         self.notes
             .iter()
@@ -280,7 +280,7 @@ impl Database {
     /// ## Errors
     /// - [`DatabaseError::IdNotFound`] if the given ID is not found in this [`Database`].
     pub fn get_and_modify(&mut self, id: TinyId, f: impl FnMut(&mut Note)) -> Result {
-        flame_guard!("db", "file", "Database", "get_and_modify");
+        crate::profile_guard!("get_and_modify", "db::file::Database");
         
         self.notes
             .iter_mut()
@@ -292,7 +292,7 @@ impl Database {
     /// Returns a slice containing all [`Note`]s in this [`Database`].
     #[must_use]
     pub fn get_all(&self) -> &[Note] {
-        flame_guard!("db", "file", "Database", "get_all");
+        crate::profile_guard!("get_all", "db::file::Database");
         
         &self.notes
     }
@@ -301,7 +301,7 @@ impl Database {
     ///       tag-list similar to the ID-list we are already storing?
     #[must_use]
     pub fn get_all_tags(&self) -> Vec<&String> {
-        flame_guard!("db", "file", "Database", "get_all_tags");
+        crate::profile_guard!("get_all_tags", "db::file::Database");
         
         let mut tags = self.notes.iter().flat_map(Note::tags).collect::<Vec<_>>();
         tags.sort_unstable();
@@ -313,7 +313,7 @@ impl Database {
     ///       tag-list similar to the ID-list we are already storing?
     #[must_use]
     pub fn get_all_tags_v2(&self) -> Vec<&String> {
-        flame_guard!("db", "file", "Database", "get_all_tags_v2");
+        crate::profile_guard!("get_all_tags_v2", "db::file::Database");
         
         let mut tags = std::collections::HashSet::new();
         for note in &self.notes {
@@ -324,7 +324,7 @@ impl Database {
 
     #[must_use]
     pub fn get_all_tags_and_counts(&self) -> Vec<(String, usize)> {
-        flame_guard!("db", "file", "Database", "get_all_tags_and_counts");
+        crate::profile_guard!("get_all_tags_and_counts", "db::file::Database");
         
         let mut map = std::collections::HashMap::new();
         for note in &self.notes {
@@ -339,7 +339,7 @@ impl Database {
     /// the given predicate `pred`.
     #[must_use]
     pub fn find(&self, pred: impl Fn(&&Note) -> bool) -> Vec<&Note> {
-        flame_guard!("db", "file", "Database", "find");
+        crate::profile_guard!("find", "db::file::Database");
         
         self.notes.iter().filter(pred).collect::<Vec<_>>()
     }
@@ -347,7 +347,7 @@ impl Database {
     /// Performs a full text search using `query` against all [`Note`]s in this [`Database`].
     #[must_use]
     pub fn text_search(&self, query: &str) -> Vec<&Note> {
-        flame_guard!("db", "file", "Database", "text_search");
+        crate::profile_guard!("text_search", "db::file::Database");
         
         self.notes
             .iter()
@@ -358,7 +358,7 @@ impl Database {
     /// The number of [`Note`]s in this [`Database`].
     #[must_use]
     pub fn len(&self) -> usize {
-        flame_guard!("db", "file", "Database", "len");
+        crate::profile_guard!("len", "db::file::Database");
         
         self.notes.len()
     }
@@ -366,7 +366,7 @@ impl Database {
     /// Whether this [`Database`] is currently empty (contains zero [`Note`]s).
     #[must_use]
     pub fn is_empty(&self) -> bool {
-        flame_guard!("db", "file", "Database", "is_empty");
+        crate::profile_guard!("is_empty", "db::file::Database");
         
         self.notes.is_empty()
     }
@@ -374,7 +374,7 @@ impl Database {
     /// Checks whether the given `id` is currently being used in this [`Database`].
     #[must_use]
     pub fn id_in_use(&self, id: TinyId) -> bool {
-        flame_guard!("db", "file", "Database", "id_in_use");
+        crate::profile_guard!("id_in_use", "db::file::Database");
         
         self.notes.iter().any(|n| n.id() == id)
     }
@@ -383,7 +383,7 @@ impl Database {
     ///
     /// **This does NOT add the returned ID to the db in any way.**
     pub(crate) fn create_id(&self) -> TinyId {
-        flame_guard!("db", "file", "Database", "create_id");
+        crate::profile_guard!("create_id", "db::file::Database");
         
         let mut id = TinyId::random();
         while self.ids.contains(&id) {
@@ -397,7 +397,7 @@ impl Database {
     /// ## Errors
     /// - [`DatabaseError::DuplicateId`] if the given ID is already in use.
     pub fn insert(&mut self, note: &Note) -> Result {
-        flame_guard!("db", "file", "Database", "insert");
+        crate::profile_guard!("insert", "db::file::Database");
         
         if self.id_in_use(note.id()) {
             return Err(DatabaseError::DuplicateId(note.id()).into());
@@ -409,7 +409,7 @@ impl Database {
 
     /// Inserts the given [`Note`] into the [`Database`] if it doesn't already exist, updating it otherwise.
     pub fn upsert(&mut self, note: &Note) {
-        flame_guard!("db", "file", "Database", "upsert");
+        crate::profile_guard!("upsert", "db::file::Database");
         
         if let Err(err) = self.insert(note) && let Error::Database(DatabaseError::DuplicateId(id)) = err {
                 self.get_and_modify(id, |n| n.update_from(note))
@@ -421,7 +421,7 @@ impl Database {
 /// Private / Crate Methods
 impl Database {
     pub(crate) fn save_dev(&self) -> Result {
-        flame_guard!("db", "file", "Database", "save_dev");
+        crate::profile_guard!("save_dev", "db::file::Database");
         
         let project_dir = std::env::var("CARGO_MANIFEST_DIR")?;
         let path = Path::new(&project_dir).join("data").join("dev.fdb");
@@ -429,7 +429,7 @@ impl Database {
     }
 
     pub(crate) fn create_random() -> Self {
-        flame_guard!("db", "file", "Database", "create_random");
+        crate::profile_guard!("create_random", "db::file::Database");
         
         let entries = fastrand::usize(500..=1000);
         let mut notes = Vec::new();
@@ -457,7 +457,7 @@ impl Database {
     ) -> Result {
         use std::fs::File;
         use std::io::Write;
-        flame_guard!("db", "file", "Database", "save_dev_with");
+        crate::profile_guard!("save_dev_with", "db::file::Database");
         
         let project_dir = std::env::var("CARGO_MANIFEST_DIR")?;
         let path = Path::new(&project_dir).join("data").join(filename);
@@ -468,7 +468,7 @@ impl Database {
     }
 
     pub(crate) fn load_dev() -> Result<Self> {
-        flame_guard!("db", "file", "Database", "load_dev");
+        crate::profile_guard!("load_dev", "db::file::Database");
         
         let project_dir = std::env::var("CARGO_MANIFEST_DIR")?;
         let path = Path::new(&project_dir).join("data").join("dev.fdb");
@@ -482,7 +482,7 @@ impl Database {
         use std::fs::File;
         use std::io::Read;
 
-        flame_guard!("db", "file", "Database", "load_dev_with");
+        crate::profile_guard!("load_dev_with", "db::file::Database");
         
         let project_dir = std::env::var("CARGO_MANIFEST_DIR")?;
         let path = Path::new(&project_dir).join("data").join(filename);
@@ -493,7 +493,7 @@ impl Database {
     }
 
     fn validate(&mut self) -> Result {
-        flame_guard!("db", "file", "Database", "validate");
+        crate::profile_guard!("validate", "db::file::Database");
         
         if self.ids.len() != self.notes.len() {
             self.register_ids();
@@ -513,7 +513,7 @@ impl Database {
     }
 
     fn register_ids(&mut self) {
-        flame_guard!("db", "file", "Database", "register_ids");
+        crate::profile_guard!("register_ids", "db::file::Database");
         
         self.ids.clear();
         self.ids = HashSet::with_capacity(self.notes.len());
@@ -523,7 +523,7 @@ impl Database {
     }
 
     fn init(&mut self) -> Result {
-        flame_guard!("db", "file", "Database", "init");
+        crate::profile_guard!("init", "db::file::Database");
         
         self.validate()?;
         Ok(())
@@ -565,7 +565,7 @@ pub enum UpdateFailurePolicy {
 
 #[cfg(test)]
 mod tests {
-    #[cfg(feature = "flame_on")]
+    #[cfg(feature = "flame")]
     use flamer::flame as flame_fn;
 
     use crate::Method;
@@ -799,56 +799,54 @@ mod tests {
     #[ignore]
     #[no_coverage]
     fn get_tags() {
-        flame_guard!("db", "file", "tests", "get_tags");
+        crate::profile_guard!("", "db::file::Database");
 
-        #[cfg(not(feature = "flame_on"))]
+        #[cfg(not(feature = "flame"))]
         let now = std::time::Instant::now();
         let db = {
-            #[cfg(feature = "flame_on")]
+            #[cfg(feature = "flame")]
             let _guard = ::flame::start_guard("create_dev_db(10_000)");
             create_dev_db(10_000)
         };
-        #[cfg(not(feature = "flame_on"))]
+        #[cfg(not(feature = "flame"))]
         let db_elapsed = now.elapsed();
 
-        #[cfg(not(feature = "flame_on"))]
+        #[cfg(not(feature = "flame"))]
         let now = std::time::Instant::now();
         let tags = {
-            #[cfg(feature = "flame_on")]
+            #[cfg(feature = "flame")]
             let _guard = ::flame::start_guard("get_all_tags");
             db.get_all_tags()
         };
-        #[cfg(not(feature = "flame_on"))]
+        #[cfg(not(feature = "flame"))]
         let tags_elapsed = now.elapsed();
 
-        #[cfg(not(feature = "flame_on"))]
+        #[cfg(not(feature = "flame"))]
         let now = std::time::Instant::now();
         let tags_v2 = {
-            #[cfg(feature = "flame_on")]
+            #[cfg(feature = "flame")]
             let _guard = ::flame::start_guard("get_all_tags_v2");
             db.get_all_tags_v2()
         };
-        #[cfg(not(feature = "flame_on"))]
+        #[cfg(not(feature = "flame"))]
         let tags_v2_elapsed = now.elapsed();
 
-        #[cfg(not(feature = "flame_on"))]
+        #[cfg(not(feature = "flame"))]
         let now = std::time::Instant::now();
         let tag_counts = {
-            #[cfg(feature = "flame_on")]
+            #[cfg(feature = "flame")]
             let _guard = ::flame::start_guard("get_all_tags_and_counts");
             db.get_all_tags_and_counts()
         };
-        #[cfg(not(feature = "flame_on"))]
+        #[cfg(not(feature = "flame"))]
         let counts_elapsed = now.elapsed();
 
         assert_eq!(tags.len(), tag_counts.len());
         assert_eq!(tags.len(), tags_v2.len());
 
-        #[cfg(feature = "flame_on")]
-        flame::dump_html(std::fs::File::create(format!("flames/{}.html", FG_PATH.join("."))).unwrap())
-            .unwrap();
+        crate::flame_dump!(html, "file.Database.get_tags");
 
-        #[cfg(not(feature = "flame_on"))]
+        #[cfg(not(feature = "flame"))]
         println!(
             "Getting Database Tags:\n\t{:<15} took {:>10?}\n\t{:<15} took {:>10?}\n\t{:<15} took {:>10?}\n\t{:<15} took {:>10?}", 
             "create_dev_db", 

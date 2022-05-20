@@ -68,7 +68,7 @@ impl Persistence {
     where
         T: serde::de::DeserializeOwned,
     {
-        crate::flame_guard!("util", "persist", "Persistence", "load_from_bytes_default");
+        crate::profile_guard!("load_from_bytes_default", "util::Persistence");
         Self::load_from_bytes(bytes, Self::DEFAULT_METHOD)
     }
 
@@ -83,7 +83,7 @@ impl Persistence {
     where
         T: serde::de::DeserializeOwned,
     {
-        crate::flame_guard!("util", "persist", "Persistence", "load_from_bytes");
+        crate::profile_guard!("load_from_bytes", "util::Persistence");
         match method {
             Method::Json => {
                 let output: T = serde_json::from_slice(bytes)?;
@@ -122,7 +122,7 @@ impl Persistence {
     where
         T: serde::Serialize,
     {
-        crate::flame_guard!("util", "persist", "Persistence", "save_to_bytes");
+        crate::profile_guard!("save_to_bytes", "util::Persistence");
         let mut bytes = Vec::with_capacity(2048);
         match method {
             Method::Json => {
@@ -163,7 +163,7 @@ impl Persistence {
     where
         T: serde::Serialize,
     {
-        crate::flame_guard!("util", "persist", "Persistence", "save_to_bytes_default");
+        crate::profile_guard!("save_to_bytes_default", "util::Persistence");
         Self::save_to_bytes(data, Self::DEFAULT_METHOD)
     }
 
@@ -179,7 +179,7 @@ impl Persistence {
     {
         use std::fs::File;
         use std::io::Read;
-        crate::flame_guard!("util", "persist", "Persistence", "load_from_file");
+        crate::profile_guard!("load_from_file", "util::Persistence");
         let path = path.as_ref();
 
         if !path.exists() {
@@ -229,7 +229,7 @@ impl Persistence {
     where
         T: serde::de::DeserializeOwned,
     {
-        crate::flame_guard!("util", "persist", "Persistence", "load_from_file_default");
+        crate::profile_guard!("load_from_file_default", "util::Persistence");
         Self::load_from_file(path, Self::DEFAULT_METHOD)
     }
 
@@ -249,7 +249,7 @@ impl Persistence {
         use std::fs::File;
         use std::io::Write;
 
-        crate::flame_guard!("util", "persist", "Persistence", "save_to_file");
+        crate::profile_guard!("save_to_file", "util::Persistence");
 
         let path = path.as_ref();
         let mut file = File::create(path)?;
@@ -293,7 +293,7 @@ impl Persistence {
     where
         T: serde::Serialize,
     {
-        crate::flame_guard!("util", "persist", "Persistence", "save_to_new_file");
+        crate::profile_guard!("save_to_new_file", "util::Persistence");
         if path.as_ref().exists() {
             return Err(
                 std::io::Error::new(std::io::ErrorKind::Other, "file already exists").into(),
@@ -314,7 +314,7 @@ impl Persistence {
     where
         T: serde::Serialize,
     {
-        crate::flame_guard!("util", "persist", "Persistence", "save_to_file_default");
+        crate::profile_guard!("save_to_file_default", "util::Persistence");
         Self::save_to_file(data, path, Self::DEFAULT_METHOD)
     }
 
@@ -332,7 +332,7 @@ impl Persistence {
     where
         T: serde::Serialize + serde::de::DeserializeOwned,
     {
-        crate::flame_guard!("util", "persist", "Persistence", "convert_file");
+        crate::profile_guard!("convert_file", "util::Persistence");
         let path = path.as_ref();
         let backup = format!("{}.bak", path.display());
         std::fs::copy(path, backup)?;
@@ -355,7 +355,7 @@ impl Persistence {
     where
         T: serde::Serialize + serde::de::DeserializeOwned,
     {
-        crate::flame_guard!("util", "persist", "Persistence", "convert_bytes");
+        crate::profile_guard!("convert_bytes", "util::Persistence");
         let data: T = Self::load_from_bytes(bytes, from)?;
         Self::save_to_bytes(&data, to)
     }
@@ -606,4 +606,13 @@ mod tests {
         assert_eq!(Method::all_methods().count(), 6);
         assert_eq!(Method::working_methods().count(), 3);
     }
+
+    crate::flame_all_tests!(
+        ["persist", "Persistence", "tests"],
+        bytes,
+        save_and_load_file,
+        convert_bytes,
+        convert_file,
+        save_and_load_file_default
+    );
 }

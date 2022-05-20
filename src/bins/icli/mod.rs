@@ -122,8 +122,8 @@ pub fn execute() -> crate::Result {
         }
     };
 
-    flame_dump!(html);
-    flame_dump!(json);
+    flame_dump!(html, "icli");
+    flame_dump!(json, "icli");
 
     // println!("Database State: {:#?}", db);
 

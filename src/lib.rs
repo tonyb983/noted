@@ -9,6 +9,9 @@
     const_trait_impl,
     control_flow_enum,
     concat_idents,
+    const_option,
+    const_slice_index,
+    const_type_name,
     crate_visibility_modifier,
     default_free_fn,
     exclusive_range_pattern,
@@ -29,6 +32,8 @@
 #![warn(
     clippy::pedantic,
     clippy::all,
+    // this is adding too many weird false positives unfortunately
+    // clippy::allow_attributes_without_reason,
     // missing_docs,
     nonstandard_style,
     rust_2018_idioms,
@@ -49,6 +54,7 @@
     clippy::unnecessary_wraps,
     // I use them sparingly and only when appropriate
     clippy::wildcard_imports,
+    reason = "these lints are annoying and somewhat pointless"
 )]
 
 //! ## Profiling Attributes
@@ -59,12 +65,12 @@
 //!   `#[no_coverage]`
 //!
 //! Flamegraph function (or any other item, modules, etc.) if feature-gated:
-//!   `#[cfg_attr(feature = "flame_on", flame)]`
+//!   `#[cfg_attr(feature = "flame", flame)]`
 //! Otherwise:
 //!   `#[flame]`
 //!
 //! Only run block of code when flamegraphing:
-//!  `#[cfg(feature = "flame_on")]`
+//!  `#[cfg(feature = "flame")]`
 
 pub mod db;
 mod macros;
@@ -78,5 +84,13 @@ pub mod util;
 
 pub use types::{DatabaseError, Error, Result};
 pub use util::persist::{Method, Persistence};
+
+#[doc(hidden)]
+#[allow(clippy::inline_always, reason = "I know what im about son.")]
+#[inline(always)]
+#[must_use]
+pub const fn type_name_of<T>(_: &T) -> &'static str {
+    std::any::type_name::<T>()
+}
 
 shadow_rs::shadow!(build_info);

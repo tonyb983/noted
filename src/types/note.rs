@@ -43,7 +43,7 @@ impl Note {
         created: OffsetDateTime,
         updated: OffsetDateTime,
     ) -> Self {
-        flame_guard!("types", "Note", "existing");
+        crate::profile_guard!("existing", "types::Note");
         Note {
             id,
             title,
@@ -58,7 +58,7 @@ impl Note {
 
     #[must_use]
     pub fn create(dto: impl Into<CreateNote>) -> Self {
-        flame_guard!("types", "Note", "create");
+        crate::profile_guard!("create", "types::Note");
         let (title, content, tags) = dto.into().into_parts();
         Self {
             id: TinyId::random(),
@@ -74,7 +74,7 @@ impl Note {
 
     #[must_use]
     pub fn create_for(db: &crate::db::Database, dto: impl Into<CreateNote>) -> Self {
-        flame_guard!("types", "Note", "create_for");
+        crate::profile_guard!("create_for", "types::Note");
         let (title, content, tags) = dto.into().into_parts();
         Self {
             id: db.create_id(),
@@ -89,7 +89,7 @@ impl Note {
     }
 
     pub fn update(&mut self, dto: impl Into<UpdateNote>) -> bool {
-        flame_guard!("types", "Note", "update");
+        crate::profile_guard!("update", "types::Note");
         let (id, title, content, tags) = dto.into().into_parts();
 
         if id != self.id {
@@ -121,7 +121,7 @@ impl Note {
     }
 
     pub fn update_from(&mut self, other: &Note) {
-        flame_guard!("types", "Note", "update_from");
+        crate::profile_guard!("update_from", "types::Note");
         if self.id != other.id {
             return;
         }
@@ -136,7 +136,7 @@ impl Note {
     }
 
     pub fn delete(&mut self, dto: impl Into<DeleteNote>) -> bool {
-        flame_guard!("types", "Note", "delete");
+        crate::profile_guard!("delete", "types::Note");
         let id = *dto.into().id();
         if self.id == id {
             self.dirty = true;
@@ -148,18 +148,18 @@ impl Note {
 
     #[must_use]
     pub fn id(&self) -> TinyId {
-        flame_guard!("types", "Note", "id");
+        crate::profile_guard!("id", "types::Note");
         self.id
     }
 
     #[must_use]
     pub fn title(&self) -> &str {
-        flame_guard!("types", "Note", "title");
+        crate::profile_guard!("title", "types::Note");
         &self.title
     }
 
     pub fn set_title(&mut self, title: &str) {
-        flame_guard!("types", "Note", "set_title");
+        crate::profile_guard!("set_title", "types::Note");
         if self.title != title {
             self.title = title.to_string();
             self.set_updated_now();
@@ -168,7 +168,7 @@ impl Note {
     }
 
     pub fn update_title(&mut self, f: impl FnOnce(&str) -> String) {
-        flame_guard!("types", "Note", "update_title");
+        crate::profile_guard!("update_title", "types::Note");
         let new = f(&self.title);
         if new != self.title {
             self.title = new;
@@ -179,12 +179,12 @@ impl Note {
 
     #[must_use]
     pub fn content(&self) -> &str {
-        flame_guard!("types", "Note", "content");
+        crate::profile_guard!("content", "types::Note");
         &self.content
     }
 
     pub fn set_content(&mut self, content: &str) {
-        flame_guard!("types", "Note", "set_content");
+        crate::profile_guard!("set_content", "types::Note");
         if self.content != content {
             self.content = content.to_string();
             self.set_updated_now();
@@ -193,7 +193,7 @@ impl Note {
     }
 
     pub fn update_content(&mut self, f: impl FnOnce(&str) -> String) {
-        flame_guard!("types", "Note", "update_content");
+        crate::profile_guard!("update_content", "types::Note");
         let new = f(&self.content);
         if new != self.content {
             self.content = new;
@@ -203,7 +203,7 @@ impl Note {
     }
 
     pub fn append_content(&mut self, content: &str) {
-        flame_guard!("types", "Note", "append_content");
+        crate::profile_guard!("append_content", "types::Note");
         if !content.is_empty() {
             if !self.content().ends_with(' ') && !content.starts_with(' ') {
                 self.content.push(' ');
@@ -216,14 +216,14 @@ impl Note {
 
     #[must_use]
     pub fn tags(&self) -> &[String] {
-        flame_guard!("types", "Note", "tags");
+        crate::profile_guard!("tags", "types::Note");
         &self.tags
     }
 
     pub fn set_tags(&mut self, mut tags: Vec<String>) {
-        flame_guard!("types", "Note", "set_tags");
-        tags.sort_unstable();
-        tags.dedup();
+        crate::profile_guard!("set_tags", "types::Note");
+        // tags.sort_unstable();
+        // tags.dedup();
         if self.tags != tags {
             self.tags = tags;
             self.set_updated_now();
@@ -232,13 +232,13 @@ impl Note {
     }
 
     pub fn update_tags(&mut self, f: impl FnOnce(&[String]) -> Vec<String>) {
-        flame_guard!("types", "Note", "update_tags");
+        crate::profile_guard!("update_tags", "types::Note");
         let new = f(&self.tags);
         self.set_tags(new);
     }
 
     pub fn add_tag(&mut self, tag: String) {
-        flame_guard!("types", "Note", "add_tag");
+        crate::profile_guard!("add_tag", "types::Note");
         if !self.tags.contains(&tag) {
             self.tags.push(tag);
             self.set_updated_now();
@@ -247,7 +247,7 @@ impl Note {
     }
 
     pub fn remove_tag(&mut self, tag: &str) {
-        flame_guard!("types", "Note", "remove_tag");
+        crate::profile_guard!("remove_tag", "types::Note");
         if let Some(index) = self.tags.iter().position(|t| t == tag) {
             self.tags.remove(index);
             self.set_updated_now();
@@ -256,101 +256,107 @@ impl Note {
     }
 
     #[must_use]
+    pub fn tag_len(&self) -> usize {
+        crate::profile_guard!("tag_len", "types::Note");
+        self.tags.len()
+    }
+
+    #[must_use]
     pub fn created(&self) -> &OffsetDateTime {
-        flame_guard!("types", "Note", "created");
+        crate::profile_guard!("created", "types::Note");
         &self.created
     }
 
     #[must_use]
     pub fn created_humanized(&self) -> impl std::fmt::Display {
-        flame_guard!("types", "Note", "created_humanized");
+        crate::profile_guard!("created_humanized", "types::Note");
         crate::util::dtf::humanize_timespan_to_now(self.created)
     }
 
     #[must_use]
     pub fn updated(&self) -> &OffsetDateTime {
-        flame_guard!("types", "Note", "updated");
+        crate::profile_guard!("updated", "types::Note");
         &self.updated
     }
 
     #[must_use]
     pub fn updated_humanized(&self) -> impl std::fmt::Display {
-        flame_guard!("types", "Note", "updated_humanized");
+        crate::profile_guard!("updated_humanized", "types::Note");
         crate::util::dtf::humanize_timespan_to_now(self.updated)
     }
 
     #[must_use]
     pub fn dirty(&self) -> bool {
-        flame_guard!("types", "Note", "dirty");
+        crate::profile_guard!("dirty", "types::Note");
         self.dirty
     }
 
     pub fn set_dirty(&mut self, dirty: bool) {
-        flame_guard!("types", "Note", "set_dirty");
+        crate::profile_guard!("set_dirty", "types::Note");
         self.dirty = dirty;
     }
 
     #[must_use]
     pub fn pending_delete(&self) -> bool {
-        flame_guard!("types", "Note", "pending_delete");
+        crate::profile_guard!("pending_delete", "types::Note");
         self.pending_delete
     }
 
     pub fn set_pending_delete(&mut self, pending_delete: bool) {
-        flame_guard!("types", "Note", "set_pending_delete");
+        crate::profile_guard!("set_pending_delete", "types::Note");
         self.pending_delete = pending_delete;
     }
 
     #[must_use]
     pub fn title_contains(&self, text: &str) -> bool {
-        flame_guard!("types", "Note", "title_contains");
+        crate::profile_guard!("title_contains", "types::Note");
         self.title.contains(text)
     }
 
     #[must_use]
     pub fn title_matches(&self, text: &str) -> bool {
-        flame_guard!("types", "Note", "title_matches");
+        crate::profile_guard!("title_matches", "types::Note");
         self.title == text
     }
 
     #[must_use]
     pub fn content_contains(&self, text: &str) -> bool {
-        flame_guard!("types", "Note", "content_contains");
+        crate::profile_guard!("content_contains", "types::Note");
         self.content.contains(text)
     }
 
     #[must_use]
     pub fn content_matches(&self, text: &str) -> bool {
-        flame_guard!("types", "Note", "content_matches");
+        crate::profile_guard!("content_matches", "types::Note");
         self.content == text
     }
 
     #[must_use]
     pub fn tag_contains(&self, text: &str) -> bool {
-        flame_guard!("types", "Note", "tag_contains");
+        crate::profile_guard!("tag_contains", "types::Note");
         self.tags.iter().any(|tag| tag.contains(text))
     }
 
     #[must_use]
     pub fn tag_matches(&self, text: &str) -> bool {
-        flame_guard!("types", "Note", "tag_matches");
+        crate::profile_guard!("tag_matches", "types::Note");
         self.tags.iter().any(|tag| tag == text)
     }
 
     #[must_use]
     pub fn full_text_search(&self, text: &str) -> bool {
-        flame_guard!("types", "Note", "full_text_search");
+        crate::profile_guard!("full_text_search", "types::Note");
         self.title_contains(text) || self.content_contains(text) || self.tag_contains(text)
     }
 
     pub(crate) fn clear_flags(&mut self) {
-        flame_guard!("types", "Note", "clear_flags");
+        crate::profile_guard!("clear_flags", "types::Note");
         self.dirty = false;
         self.pending_delete = false;
     }
 
     pub(crate) fn make_invalid(&mut self) {
-        flame_guard!("types", "Note", "make_invalid");
+        crate::profile_guard!("make_invalid", "types::Note");
         self.id = TinyId::null();
         self.dirty = false;
         self.pending_delete = false;
@@ -362,13 +368,13 @@ impl Note {
     }
 
     pub fn touch(&mut self) {
-        flame_guard!("types", "Note", "touch");
+        crate::profile_guard!("touch", "types::Note");
         self.set_updated_now();
         self.set_dirty(true);
     }
 
     fn set_updated_now(&mut self) {
-        flame_guard!("types", "Note", "set_updated_now");
+        crate::profile_guard!("set_updated_now", "types::Note");
         self.updated = OffsetDateTime::now_utc();
     }
 }
