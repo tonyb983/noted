@@ -4,70 +4,82 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
+use std::path::{Path, PathBuf};
+
+use crossbeam_channel::{Receiver, Sender};
+use egui_toast::Toasts;
+use tinyid::TinyId;
+
 use crate::types::Note;
+
+use super::{
+    backend::{Backend, ToBackend, ToFrontend},
+    settings::{AppSettings, AppSettingsUi},
+};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 enum AppState {
-    Main,
-    EditingNote,
+    NoDatabase,
+    DatabaseOpen,
 }
 
 pub struct GuiApp {
-    db: crate::db::Database,
     notes: Vec<Note>,
     active_note: Option<Note>,
     active_tag: Option<usize>,
     state: AppState,
+    settings: AppSettings,
+    settings_open: bool,
+    front_tx: Option<Sender<ToBackend>>,
+    back_rx: Option<Receiver<ToFrontend>>,
+    error_log: Vec<String>,
 }
 
 impl GuiApp {
-    pub fn new(cc: &eframe::CreationContext<'_>, db: crate::db::Database) -> Self {
+    pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
+        let settings = AppSettings::load_or_create().expect("Unable to load/create app settings");
         Self::setup_custom_fonts(&cc.egui_ctx);
-        let notes = db.get_all().to_vec();
+        let notes = Vec::new();
+
+        let (front_tx, front_rx) = crossbeam_channel::unbounded();
+        let (back_tx, back_rx) = crossbeam_channel::unbounded();
+
+        let frame_clone = cc.egui_ctx.clone();
+        std::thread::spawn(move || {
+            Backend::new(back_tx, front_rx, frame_clone).init();
+        });
+
+        front_tx
+            .send(ToBackend::Startup)
+            .expect("Unable to send startup message to backend");
+
+        if settings.load_default_on_start {
+            if settings.default_database.exists() {
+                front_tx
+                    .send(ToBackend::OpenDatabase {
+                        path: settings.default_database.clone(),
+                    })
+                    .expect("Unable to send open database message to backend");
+            } else {
+                front_tx
+                    .send(ToBackend::CreateDatabase {
+                        path: settings.default_database.clone(),
+                    })
+                    .expect("Unable to send open database message to backend");
+            }
+        }
+
         Self {
-            db,
             notes,
             active_note: None,
             active_tag: None,
-            state: AppState::Main,
+            front_tx: Some(front_tx),
+            back_rx: Some(back_rx),
+            state: AppState::NoDatabase,
+            settings,
+            settings_open: false,
+            error_log: Vec::new(),
         }
-    }
-
-    pub fn update_notes(&mut self) {
-        if let Some(ref mut note) = self.active_note {
-            self.db.ensure_sync_v2(note);
-        }
-        self.notes = self.db.get_all().to_vec();
-    }
-
-    pub fn save_data(&mut self) {
-        self.update_notes();
-        let _res = self.db.save_dev();
-    }
-
-    pub fn set_active_note(&mut self, note: Note) {
-        if let Some(ref current) = self.active_note {
-            if current.id() == note.id() {
-                return;
-            }
-        }
-        self.active_note = Some(note);
-        self.active_tag = None;
-    }
-
-    pub fn set_editing_tag(&mut self, index: usize) {
-        self.active_tag = Some(index);
-    }
-
-    pub fn set_adding_tag(&mut self) {
-        if let Some(ref mut note) = self.active_note {
-            note.add_tag("New Tag".to_string());
-            self.active_tag = Some(note.tag_len() - 1);
-        }
-    }
-
-    pub fn clear_editing_tag(&mut self) {
-        self.active_tag = None;
     }
 
     fn setup_custom_fonts(ctx: &egui::Context) {
@@ -102,21 +114,116 @@ impl GuiApp {
         // Tell egui to use these fonts:
         ctx.set_fonts(fonts);
     }
-}
 
-impl eframe::App for GuiApp {
-    fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
-        crate::profile_guard!("update", "gui::GuiApp");
+    pub fn new_db(&mut self, path: PathBuf) {
+        if let Some(tx) = &self.front_tx {
+            tx.send(ToBackend::CreateDatabase { path })
+                .expect("Unable to send create database message to backend");
+        }
+    }
+
+    pub fn load_db(&mut self, path: PathBuf) {
+        if let Some(tx) = &self.front_tx {
+            tx.send(ToBackend::OpenDatabase { path })
+                .expect("Unable to send open database message to backend");
+        }
+    }
+
+    pub fn save_data(&mut self) {
+        if let Some(tx) = &self.front_tx {
+            tx.send(ToBackend::SaveData)
+                .expect("Unable to send timed save message to backend");
+        }
+    }
+
+    pub fn set_active_note(&mut self, note: Note) {
+        if let Some(ref current) = self.active_note {
+            if current.id() == note.id() {
+                return;
+            }
+        }
+        self.active_note = Some(note);
+        self.active_tag = None;
+    }
+
+    pub fn set_editing_tag(&mut self, index: usize) {
+        self.active_tag = Some(index);
+    }
+
+    pub fn set_adding_tag(&mut self) {
+        if let Some(ref mut note) = self.active_note {
+            note.add_tag("New Tag".to_string());
+            self.active_tag = Some(note.tag_len() - 1);
+        }
+    }
+
+    pub fn clear_editing_tag(&mut self) {
+        self.active_tag = None;
+    }
+
+    pub fn new_note(&mut self) {
+        if let Some(tx) = &self.front_tx {
+            tx.send(ToBackend::CreateNote {
+                dto: (String::from("New Note"), String::new()).into(),
+            })
+            .expect("Unable to send new note message to backend");
+        }
+    }
+
+    pub fn update_active_note(&self) {
+        if let Some(ref note) = self.active_note {
+            if let Some(ref tx) = self.front_tx {
+                tx.send(ToBackend::UpdateNote { note: note.clone() })
+                    .expect("Unable to send update note message to backend");
+            }
+        }
+    }
+
+    pub fn delete_note(&mut self, id: TinyId) {
+        if let Some(ref active) = self.active_note {
+            if active.id() == id {
+                self.active_note = None;
+                self.active_tag = None;
+            }
+        }
+        if let Some(tx) = &self.front_tx {
+            tx.send(ToBackend::DeleteNote { id })
+                .expect("Unable to send delete note message to backend");
+        }
+    }
+
+    fn render_db_loaded(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
         let mut note_changed = false;
-        egui::SidePanel::left("note_list_panel").show(ctx, |ui| {
+        let mut delete_requested = None;
+
+        let mut side_panel = egui::SidePanel::left("note_list_panel")
+            .width_range(50.0..=200.0)
+            .default_width(100.0);
+        side_panel.show(ctx, |ui| {
             crate::profile_guard!("SidePanel", "gui::GuiApp::update");
-            ui.heading(egui::RichText::new("Notes").heading());
+            let side_width = ui.available_width();
+            let side_width = side_width.min(100.0);
+            ui.allocate_ui_with_layout(
+                egui::Vec2::new(side_width, 50.),
+                egui::Layout::centered_and_justified(egui::Direction::LeftToRight),
+                |ui| {
+                    ui.heading(egui::RichText::new("Notes").heading());
+                    if ui.button("New Note").clicked() {
+                        self.new_note();
+                    }
+                },
+            );
             ui.separator();
             egui::ScrollArea::vertical().show(ui, |ui| {
-                for note in &self.notes {
-                    if ui.button(note.title()).clicked() {
+                for (i, note) in self.notes.iter().enumerate() {
+                    let button = ui.button(note.title()).context_menu(|ui| {
+                        if ui.small_button("Delete this note.").clicked() {
+                            delete_requested = Some(note.id());
+                            ui.close_menu();
+                        }
+                    });
+                    if button.clicked() {
                         self.active_note = Some(note.clone());
-                        self.state = AppState::EditingNote;
                     }
                 }
             });
@@ -126,15 +233,9 @@ impl eframe::App for GuiApp {
             crate::profile_guard!("CentralPanel", "gui::GuiApp::update");
             match active {
                 Some(ref mut note) => {
-                    if render_title(ui, note) {
-                        note_changed = true;
-                    }
-                    if render_content(ui, note) {
-                        note_changed = true;
-                    }
-                    if render_tags(ui, note, self) {
-                        note_changed = true;
-                    }
+                    note_changed = note_changed || Self::render_title(ui, note);
+                    note_changed = note_changed || Self::render_content(ui, note);
+                    note_changed = note_changed || self.render_tags(ui, note);
                 }
                 None => {
                     ui.centered_and_justified(|ui| ui.label("Select a note to start editing!"));
@@ -144,14 +245,234 @@ impl eframe::App for GuiApp {
 
         if note_changed {
             self.active_note = active;
-            self.update_notes();
+            self.update_active_note();
+        }
+
+        if let Some(id) = delete_requested {
+            self.delete_note(id);
+        }
+    }
+
+    fn render_no_db(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
+        egui::CentralPanel::default().show(ctx, |ui| {
+            ui.allocate_ui_with_layout(
+                egui::Vec2::new(200., 200.),
+                egui::Layout::centered_and_justified(egui::Direction::TopDown),
+                |ui| {
+                    ui.label("No Database Open...");
+                    if ui.button("New").clicked() {
+                        if let Some(path) = rfd::FileDialog::new()
+                            .set_directory(env!("CARGO_MANIFEST_DIR"))
+                            .add_filter("Note Data", &["db", "fdb", "data", "noted"])
+                            .save_file()
+                        {
+                            self.new_db(path);
+                        }
+                    }
+                    if ui.button("Open").clicked() {
+                        if let Some(path) = rfd::FileDialog::new()
+                            .set_directory(env!("CARGO_MANIFEST_DIR"))
+                            .add_filter("Note Data", &["db", "fdb", "data", "noted"])
+                            .pick_file()
+                        {
+                            self.load_db(path);
+                        }
+                    }
+                },
+            );
+        });
+    }
+
+    fn render_settings(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
+        egui::CentralPanel::default().show(ctx, |ui| {
+            let changed = AppSettingsUi::render(ui, &mut self.settings);
+            if changed {
+                if let Err(err) = self.settings.save_default() {
+                    self.error_log.push(err.to_string());
+                }
+            }
+        });
+    }
+
+    fn render_title(ui: &mut egui::Ui, note: &mut Note) -> bool {
+        let mut note_title = note.title().to_string();
+        let title_response = ui.text_edit_singleline(&mut note_title);
+        if title_response.changed() {
+            note.set_title(note_title.as_str());
+            return true;
+        }
+
+        false
+    }
+
+    fn render_content(ui: &mut egui::Ui, note: &mut Note) -> bool {
+        let mut note_content = note.content().to_string();
+        let content_response = ui.code_editor(&mut note_content);
+        if content_response.changed() {
+            note.set_content(note_content.as_str());
+            return true;
+        }
+        false
+    }
+
+    #[allow(clippy::collapsible_if)]
+    #[allow(clippy::collapsible_else_if)]
+    fn render_tags(&mut self, ui: &mut egui::Ui, note: &mut Note) -> bool {
+        let mut note_tags = note.tags().to_vec();
+        let mut removals = Vec::new();
+        let mut tags_changed = false;
+        ui.label("Tags:");
+
+        match self.active_tag {
+            None => {
+                for (i, tag) in note_tags.iter_mut().enumerate() {
+                    ui.horizontal(|ui| {
+                        let tag_response =
+                            ui.add(egui::Label::new(tag.as_str()).sense(egui::Sense::click()));
+                        if tag_response.double_clicked() {
+                            self.set_editing_tag(i);
+                        }
+                        if ui.small_button("x").clicked() {
+                            removals.push(i);
+                        }
+                    });
+                }
+
+                if ui.small_button("+").clicked() {
+                    self.set_adding_tag();
+                }
+            }
+            Some(idx) => {
+                for (i, tag) in note_tags.iter_mut().enumerate() {
+                    ui.horizontal(|ui| {
+                        if i == idx {
+                            let edit_response = ui.text_edit_singleline(tag);
+                            if edit_response.changed() {
+                                tags_changed = true;
+                            } else if edit_response.lost_focus() {
+                                self.clear_editing_tag();
+                            }
+                        } else {
+                            if ui.button(tag.as_str()).clicked() {
+                                self.set_editing_tag(i);
+                            }
+                        }
+                        if ui.small_button("x").clicked() {
+                            removals.push(i);
+                        }
+                    });
+                }
+
+                if ui.small_button("+").clicked() {
+                    self.set_adding_tag();
+                }
+            }
+        }
+
+        if !removals.is_empty() {
+            removals.sort_unstable();
+            removals.reverse();
+            for i in removals {
+                note_tags.remove(i);
+            }
+            tags_changed = true;
+        }
+
+        if tags_changed {
+            note.set_tags(note_tags);
+            return true;
+        }
+
+        false
+    }
+
+    fn render_error_log(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
+        egui::TopBottomPanel::bottom("error_log")
+            .default_height(100.)
+            .height_range(20.0..=300.0)
+            .resizable(true)
+            .show(ctx, |ui| {
+                let width = ui.available_width();
+                ui.allocate_ui_with_layout(
+                    egui::Vec2::new(width, 30.),
+                    egui::Layout::right_to_left(),
+                    |ui| {
+                        ui.style_mut().override_font_id = Some(egui::FontId::monospace(12.));
+                        // ui.style_mut().override_text_style = Some(egui::TextStyle::Monospace);
+                        if ui.button("\u{f013}").clicked() {
+                            self.settings_open = !self.settings_open;
+                        }
+                        let log_label = egui::Label::new("Log").wrap(false);
+                        let space = ui.available_width() - 40.0;
+                        ui.add_space(space);
+                        ui.label("Log");
+                        ui.reset_style();
+                    },
+                );
+                let text_style = egui::TextStyle::Body;
+                let row_height = ui.text_style_height(&text_style) * 2.;
+                egui::ScrollArea::vertical()
+                    .stick_to_bottom()
+                    .hscroll(false)
+                    .show_rows(ui, row_height, self.error_log.len(), |ui, range| {
+                        for i in range {
+                            ui.add(egui::Label::new(&self.error_log[i]));
+                        }
+                    });
+            });
+    }
+}
+
+impl eframe::App for GuiApp {
+    fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
+        crate::profile_guard!("update", "gui::GuiApp");
+
+        if let Some(rx) = &self.back_rx {
+            match rx.try_recv() {
+                Ok(msg) => match msg {
+                    ToFrontend::RefreshNoteList { notes } => {
+                        self.notes = notes;
+                    }
+                    ToFrontend::Error { error_msg } => self.error_log.push(error_msg),
+                    ToFrontend::NoteCreated { note } => {
+                        self.active_note = Some(note);
+                        self.active_tag = None;
+                    }
+                    ToFrontend::DatabaseLoaded { notes } => {
+                        self.state = AppState::DatabaseOpen;
+                        self.notes = notes;
+                        self.active_note = None;
+                        self.active_tag = None;
+                    }
+                    ToFrontend::DatabaseClosed => {
+                        self.state = AppState::NoDatabase;
+                        self.notes = Vec::new();
+                        self.active_note = None;
+                        self.active_tag = None;
+                    }
+                },
+                Err(err) => {
+                    let _ = err;
+                }
+            }
+        }
+
+        self.render_error_log(ctx, frame);
+
+        if self.settings_open {
+            self.render_settings(ctx, frame);
+            return;
+        }
+
+        match self.state {
+            AppState::NoDatabase => self.render_no_db(ctx, frame),
+            AppState::DatabaseOpen => self.render_db_loaded(ctx, frame),
         }
     }
 
     fn save(&mut self, _storage: &mut dyn eframe::Storage) {
         crate::profile_guard!("save", "gui::GuiApp");
-        self.update_notes();
-        let _res = self.db.save_dev();
+        self.save_data();
     }
 
     fn on_exit(&mut self, _gl: &eframe::glow::Context) {
@@ -159,97 +480,6 @@ impl eframe::App for GuiApp {
     }
 
     fn auto_save_interval(&self) -> std::time::Duration {
-        std::time::Duration::from_secs(30)
+        std::time::Duration::from_secs(self.settings.autosave_interval)
     }
-}
-
-fn render_title(ui: &mut egui::Ui, note: &mut Note) -> bool {
-    let mut note_title = note.title().to_string();
-    let title_response = ui.text_edit_singleline(&mut note_title);
-    if title_response.changed() {
-        note.set_title(note_title.as_str());
-        return true;
-    }
-
-    false
-}
-
-fn render_content(ui: &mut egui::Ui, note: &mut Note) -> bool {
-    let mut note_content = note.content().to_string();
-    let content_response = ui.code_editor(&mut note_content);
-    if content_response.changed() {
-        note.set_content(note_content.as_str());
-        return true;
-    }
-    false
-}
-
-#[allow(clippy::collapsible_if)]
-#[allow(clippy::collapsible_else_if)]
-fn render_tags(ui: &mut egui::Ui, note: &mut Note, app: &mut GuiApp) -> bool {
-    let mut note_tags = note.tags().to_vec();
-    let mut removals = Vec::new();
-    let mut tags_changed = false;
-    ui.label("Tags:");
-
-    match app.active_tag {
-        None => {
-            for (i, tag) in note_tags.iter_mut().enumerate() {
-                ui.horizontal(|ui| {
-                    let tag_response = ui.add(egui::Label::new(tag.as_str()).sense(egui::Sense::click()));
-                    if tag_response.double_clicked() {
-                        app.set_editing_tag(i);
-                    }
-                    if ui.small_button("x").clicked() {
-                        removals.push(i);
-                    }
-                });
-            }
-
-            if ui.small_button("+").clicked() {
-                app.set_adding_tag();
-            }
-        }
-        Some(idx) => {
-            for (i, tag) in note_tags.iter_mut().enumerate() {
-                ui.horizontal(|ui| {
-                    if i == idx {
-                        let edit_response = ui.text_edit_singleline(tag);
-                        if edit_response.changed() {
-                            tags_changed = true;
-                        } else if edit_response.lost_focus() {
-                            app.clear_editing_tag();
-                        }
-                    } else {
-                        if ui.button(tag.as_str()).clicked() {
-                            app.set_editing_tag(i);
-                        }
-                    }
-                    if ui.small_button("x").clicked() {
-                        removals.push(i);
-                    }
-                });
-            }
-
-            if ui.small_button("+").clicked() {
-                app.set_adding_tag();
-            }
-        }
-    }
-
-    if !removals.is_empty() {
-        removals.sort_unstable();
-        removals.reverse();
-        for i in removals {
-            note_tags.remove(i);
-        }
-        tags_changed = true;
-    }
-
-    if tags_changed {
-        note.set_tags(note_tags);
-        return true;
-    }
-
-    false
 }

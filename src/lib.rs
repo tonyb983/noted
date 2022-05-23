@@ -20,6 +20,7 @@
     let_chains,
     let_else,
     lint_reasons,
+    io_error_other,
     no_coverage,
     once_cell,
     pattern,
@@ -41,6 +42,7 @@
     rust_2021_compatibility,
     // rustdoc::all
 )]
+#![warn(unused_crate_dependencies)]
 #![allow(
     // This is a library so there's going to be a lot of unused
     unused,

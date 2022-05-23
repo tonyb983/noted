@@ -9,31 +9,29 @@ use std::path::Path;
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Method {
     Json,
-    Cbor,
+    // Cbor,
     MsgPack,
-    Protobuf,
-    Flatbuffer,
-    Flexbuffer,
+    // Protobuf,
+    // Flatbuffer,
+    // Flexbuffer,
 }
 
 impl Method {
     pub(crate) fn all_methods() -> impl Iterator<Item = Self> {
         [
             Method::Json,
-            Method::Cbor,
+            // Method::Cbor,
             Method::MsgPack,
-            Method::Protobuf,
-            Method::Flatbuffer,
-            Method::Flexbuffer,
+            // Method::Protobuf,
+            // Method::Flatbuffer,
+            // Method::Flexbuffer,
         ]
         .iter()
         .copied()
     }
 
     pub(crate) fn working_methods() -> impl Iterator<Item = Self> {
-        [Method::Json, Method::Cbor, Method::MsgPack]
-            .iter()
-            .copied()
+        [Method::Json, Method::MsgPack].iter().copied()
     }
 }
 
@@ -41,11 +39,11 @@ impl std::fmt::Display for Method {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Method::Json => write!(f, "json"),
-            Method::Cbor => write!(f, "cbor"),
+            // Method::Cbor => write!(f, "cbor"),
             Method::MsgPack => write!(f, "msgpack"),
-            Method::Protobuf => write!(f, "protobuf"),
-            Method::Flatbuffer => write!(f, "flatbuffer"),
-            Method::Flexbuffer => write!(f, "flexbuffer"),
+            // Method::Protobuf => write!(f, "protobuf"),
+            // Method::Flatbuffer => write!(f, "flatbuffer"),
+            // Method::Flexbuffer => write!(f, "flexbuffer"),
         }
     }
 }
@@ -89,25 +87,24 @@ impl Persistence {
                 let output: T = serde_json::from_slice(bytes)?;
                 Ok(output)
             }
-            Method::Cbor => {
-                let output = ciborium::de::from_reader(bytes)?;
-                Ok(output)
-            }
+            // Method::Cbor => {
+            //     let output = ciborium::de::from_reader(bytes)?;
+            //     Ok(output)
+            // }
             Method::MsgPack => {
                 let output = rmp_serde::from_read(bytes)?;
                 Ok(output)
-            }
-            Method::Protobuf => {
-                crate::Error::not_implemented("protobuf persistence is not yet implemented.").into()
-            }
-            Method::Flatbuffer => {
-                crate::Error::not_implemented("flatbuffer persistence is not yet implemented.")
-                    .into()
-            }
-            Method::Flexbuffer => {
-                crate::Error::not_implemented("flexbuffer persistence is not yet implemented.")
-                    .into()
-            }
+            } // Method::Protobuf => {
+              //     crate::Error::not_implemented("protobuf persistence is not yet implemented.").into()
+              // }
+              // Method::Flatbuffer => {
+              //     crate::Error::not_implemented("flatbuffer persistence is not yet implemented.")
+              //         .into()
+              // }
+              // Method::Flexbuffer => {
+              //     crate::Error::not_implemented("flexbuffer persistence is not yet implemented.")
+              //         .into()
+              // }
         }
     }
 
@@ -129,26 +126,24 @@ impl Persistence {
                 serde_json::to_writer(&mut bytes, data)?;
                 Ok(bytes)
             }
-            Method::Cbor => {
-                ciborium::ser::into_writer(data, &mut bytes)?;
-                Ok(bytes)
-            }
+            // Method::Cbor => {
+            //     ciborium::ser::into_writer(data, &mut bytes)?;
+            //     Ok(bytes)
+            // }
             Method::MsgPack => {
                 rmp_serde::encode::write(&mut bytes, data)?;
                 Ok(bytes)
-            }
-
-            Method::Protobuf => {
-                crate::Error::not_implemented("protobuf persistence is not yet implemented.").into()
-            }
-            Method::Flatbuffer => {
-                crate::Error::not_implemented("flatbuffer persistence is not yet implemented.")
-                    .into()
-            }
-            Method::Flexbuffer => {
-                crate::Error::not_implemented("flexbuffer persistence is not yet implemented.")
-                    .into()
-            }
+            } // Method::Protobuf => {
+              //     crate::Error::not_implemented("protobuf persistence is not yet implemented.").into()
+              // }
+              // Method::Flatbuffer => {
+              //     crate::Error::not_implemented("flatbuffer persistence is not yet implemented.")
+              //         .into()
+              // }
+              // Method::Flexbuffer => {
+              //     crate::Error::not_implemented("flexbuffer persistence is not yet implemented.")
+              //         .into()
+              // }
         }
     }
 
@@ -196,25 +191,24 @@ impl Persistence {
                 let output = serde_json::from_reader(buf)?;
                 Ok(output)
             }
-            Method::Cbor => {
-                let output = ciborium::de::from_reader(buf)?;
-                Ok(output)
-            }
+            // Method::Cbor => {
+            //     let output = ciborium::de::from_reader(buf)?;
+            //     Ok(output)
+            // }
             Method::MsgPack => {
                 let output = rmp_serde::from_read(buf)?;
                 Ok(output)
-            }
-            Method::Protobuf => {
-                crate::Error::not_implemented("protobuf persistence is not yet implemented.").into()
-            }
-            Method::Flatbuffer => {
-                crate::Error::not_implemented("flatbuffer persistence is not yet implemented.")
-                    .into()
-            }
-            Method::Flexbuffer => {
-                crate::Error::not_implemented("flexbuffer persistence is not yet implemented.")
-                    .into()
-            }
+            } // Method::Protobuf => {
+              //     crate::Error::not_implemented("protobuf persistence is not yet implemented.").into()
+              // }
+              // Method::Flatbuffer => {
+              //     crate::Error::not_implemented("flatbuffer persistence is not yet implemented.")
+              //         .into()
+              // }
+              // Method::Flexbuffer => {
+              //     crate::Error::not_implemented("flexbuffer persistence is not yet implemented.")
+              //         .into()
+              // }
         }
     }
 
@@ -259,26 +253,24 @@ impl Persistence {
                 serde_json::to_writer(buf, data)?;
                 Ok(())
             }
-            Method::Cbor => {
-                ciborium::ser::into_writer(data, buf)?;
-                Ok(())
-            }
+            // Method::Cbor => {
+            //     ciborium::ser::into_writer(data, buf)?;
+            //     Ok(())
+            // }
             Method::MsgPack => {
                 rmp_serde::encode::write(&mut buf, data)?;
                 Ok(())
-            }
-
-            Method::Protobuf => {
-                crate::Error::not_implemented("protobuf persistence is not yet implemented.").into()
-            }
-            Method::Flatbuffer => {
-                crate::Error::not_implemented("flatbuffer persistence is not yet implemented.")
-                    .into()
-            }
-            Method::Flexbuffer => {
-                crate::Error::not_implemented("flexbuffer persistence is not yet implemented.")
-                    .into()
-            }
+            } // Method::Protobuf => {
+              //     crate::Error::not_implemented("protobuf persistence is not yet implemented.").into()
+              // }
+              // Method::Flatbuffer => {
+              //     crate::Error::not_implemented("flatbuffer persistence is not yet implemented.")
+              //         .into()
+              // }
+              // Method::Flexbuffer => {
+              //     crate::Error::not_implemented("flexbuffer persistence is not yet implemented.")
+              //         .into()
+              // }
         }
     }
 
@@ -386,24 +378,14 @@ mod tests {
         };
 
         for method in Method::all_methods() {
-            if method == Method::Flexbuffer
-                || method == Method::Flatbuffer
-                || method == Method::Protobuf
-            {
-                let result = Persistence::save_to_bytes(&data, method);
-                assert!(result.is_err());
-                let back: Result<TestStruct, _> = Persistence::load_from_bytes(&Vec::new(), method);
-                assert!(back.is_err());
-            } else {
-                let result = Persistence::save_to_bytes(&data, method);
-                assert!(result.is_ok());
-                let bytes = result.unwrap();
-                let back: Result<TestStruct, _> = Persistence::load_from_bytes(&bytes, method);
-                assert!(back.is_ok());
-                let cereal = back.unwrap();
-                assert_eq!(cereal, data);
-                assert_ne!(cereal, TestStruct::default());
-            }
+            let result = Persistence::save_to_bytes(&data, method);
+            assert!(result.is_ok());
+            let bytes = result.unwrap();
+            let back: Result<TestStruct, _> = Persistence::load_from_bytes(&bytes, method);
+            assert!(back.is_ok());
+            let cereal = back.unwrap();
+            assert_eq!(cereal, data);
+            assert_ne!(cereal, TestStruct::default());
         }
 
         let result = Persistence::save_to_bytes_default(&data);
@@ -434,23 +416,13 @@ mod tests {
         println!("Tempfile Path: {}", tempfile.display());
 
         for method in Method::all_methods() {
-            if method == Method::Flexbuffer
-                || method == Method::Flatbuffer
-                || method == Method::Protobuf
-            {
-                let result = Persistence::save_to_file(&data, &tempfile, method);
-                assert!(result.is_err());
-                let back: Result<TestStruct, _> = Persistence::load_from_file(&tempfile, method);
-                assert!(back.is_err());
-            } else {
-                let result = Persistence::save_to_file(&data, &tempfile, method);
-                assert!(result.is_ok());
-                assert!(Persistence::save_to_new_file(&data, &tempfile, method).is_err());
-                let back: Result<TestStruct, _> = Persistence::load_from_file(&tempfile, method);
-                assert!(back.is_ok());
-                let cereal = back.unwrap();
-                assert_eq!(cereal, data);
-            }
+            let result = Persistence::save_to_file(&data, &tempfile, method);
+            assert!(result.is_ok());
+            assert!(Persistence::save_to_new_file(&data, &tempfile, method).is_err());
+            let back: Result<TestStruct, _> = Persistence::load_from_file(&tempfile, method);
+            assert!(back.is_ok());
+            let cereal = back.unwrap();
+            assert_eq!(cereal, data);
         }
 
         let result = Persistence::save_to_file_default(&data, &tempfile);
@@ -487,15 +459,8 @@ mod tests {
 
         let mut json_bytes = Persistence::save_to_bytes(&data, Method::Json).unwrap();
 
-        let mut cbor_bytes =
-            Persistence::convert_bytes::<TestStruct>(&json_bytes, Method::Json, Method::Cbor)
-                .unwrap();
-        let cbor_data: TestStruct =
-            Persistence::load_from_bytes(&cbor_bytes, Method::Cbor).unwrap();
-        assert_eq!(cbor_data, data);
-
         let mut msgpack_bytes =
-            Persistence::convert_bytes::<TestStruct>(&cbor_bytes, Method::Cbor, Method::MsgPack)
+            Persistence::convert_bytes::<TestStruct>(&json_bytes, Method::Json, Method::MsgPack)
                 .unwrap();
         let mp_data: TestStruct =
             Persistence::load_from_bytes(&msgpack_bytes, Method::MsgPack).unwrap();
@@ -536,8 +501,7 @@ mod tests {
         assert!(result.is_ok());
 
         for &(from, to) in &[
-            (Method::Json, Method::Cbor),
-            (Method::Cbor, Method::MsgPack),
+            (Method::Json, Method::MsgPack),
             (Method::MsgPack, Method::Json),
         ] {
             assert!(
@@ -564,7 +528,8 @@ mod tests {
             bad_file.display()
         );
         assert!(
-            Persistence::convert_file::<TestStruct>(&bad_file, Method::Json, Method::Cbor).is_err()
+            Persistence::convert_file::<TestStruct>(&bad_file, Method::Json, Method::MsgPack)
+                .is_err()
         );
     }
 
@@ -597,11 +562,11 @@ mod tests {
     #[no_coverage]
     fn method() {
         assert_eq!(Method::Json.to_string(), "json");
-        assert_eq!(Method::Cbor.to_string(), "cbor");
+        // assert_eq!(Method::Cbor.to_string(), "cbor");
         assert_eq!(Method::MsgPack.to_string(), "msgpack");
-        assert_eq!(Method::Protobuf.to_string(), "protobuf");
-        assert_eq!(Method::Flatbuffer.to_string(), "flatbuffer");
-        assert_eq!(Method::Flexbuffer.to_string(), "flexbuffer");
+        // assert_eq!(Method::Protobuf.to_string(), "protobuf");
+        // assert_eq!(Method::Flatbuffer.to_string(), "flatbuffer");
+        // assert_eq!(Method::Flexbuffer.to_string(), "flexbuffer");
 
         assert_eq!(Method::all_methods().count(), 6);
         assert_eq!(Method::working_methods().count(), 3);

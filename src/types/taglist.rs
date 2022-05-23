@@ -47,39 +47,12 @@ impl TagList {
     }
 
     #[must_use]
-    pub fn matches_mt(&self, tag: &str) -> bool {
-        use rayon::iter::IntoParallelRefIterator;
-        use rayon::iter::ParallelIterator;
-        self.data.par_iter().any(|t| t == tag)
-    }
-
-    #[must_use]
     pub fn contains(&self, text: &str) -> bool {
         self.data.iter().any(|t| t.contains(text))
     }
 
-    #[must_use]
-    pub fn contains_mt(&self, text: &str) -> bool {
-        use rayon::iter::IntoParallelRefIterator;
-        use rayon::iter::ParallelIterator;
-        self.data.par_iter().any(|t| t.contains(text))
-    }
-
     pub fn remove(&mut self, tag: &str) -> bool {
         if let Some(index) = self.data.iter().position(|t| t == tag) {
-            self.data.remove(index);
-            self.dirty = true;
-            true
-        } else {
-            false
-        }
-    }
-
-    pub fn remove_mt(&mut self, tag: &str) -> bool {
-        use rayon::iter::IndexedParallelIterator;
-        use rayon::iter::IntoParallelRefIterator;
-        use rayon::iter::ParallelIterator;
-        if let Some(index) = self.data.par_iter().position_any(|t| t == tag) {
             self.data.remove(index);
             self.dirty = true;
             true
