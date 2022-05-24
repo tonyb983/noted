@@ -562,14 +562,10 @@ mod tests {
     #[no_coverage]
     fn method() {
         assert_eq!(Method::Json.to_string(), "json");
-        // assert_eq!(Method::Cbor.to_string(), "cbor");
         assert_eq!(Method::MsgPack.to_string(), "msgpack");
-        // assert_eq!(Method::Protobuf.to_string(), "protobuf");
-        // assert_eq!(Method::Flatbuffer.to_string(), "flatbuffer");
-        // assert_eq!(Method::Flexbuffer.to_string(), "flexbuffer");
 
-        assert_eq!(Method::all_methods().count(), 6);
-        assert_eq!(Method::working_methods().count(), 3);
+        assert_eq!(Method::all_methods().count(), 2);
+        assert_eq!(Method::working_methods().count(), 2);
     }
 
     crate::flame_all_tests!(

@@ -23,6 +23,13 @@ enum AppState {
     DatabaseOpen,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+enum ExitState {
+    Running,
+    ExitRequested,
+    Exiting,
+}
+
 pub struct GuiApp {
     notes: Vec<Note>,
     active_note: Option<Note>,
@@ -33,6 +40,7 @@ pub struct GuiApp {
     front_tx: Option<Sender<ToBackend>>,
     back_rx: Option<Receiver<ToFrontend>>,
     error_log: Vec<String>,
+    exit_state: ExitState,
 }
 
 impl GuiApp {
@@ -79,6 +87,7 @@ impl GuiApp {
             settings,
             settings_open: false,
             error_log: Vec::new(),
+            exit_state: ExitState::Running,
         }
     }
 
@@ -115,28 +124,28 @@ impl GuiApp {
         ctx.set_fonts(fonts);
     }
 
-    pub fn new_db(&mut self, path: PathBuf) {
+    fn new_db(&mut self, path: PathBuf) {
         if let Some(tx) = &self.front_tx {
             tx.send(ToBackend::CreateDatabase { path })
                 .expect("Unable to send create database message to backend");
         }
     }
 
-    pub fn load_db(&mut self, path: PathBuf) {
+    fn load_db(&mut self, path: PathBuf) {
         if let Some(tx) = &self.front_tx {
             tx.send(ToBackend::OpenDatabase { path })
                 .expect("Unable to send open database message to backend");
         }
     }
 
-    pub fn save_data(&mut self) {
+    fn save_data(&mut self) {
         if let Some(tx) = &self.front_tx {
             tx.send(ToBackend::SaveData)
                 .expect("Unable to send timed save message to backend");
         }
     }
 
-    pub fn set_active_note(&mut self, note: Note) {
+    fn set_active_note(&mut self, note: Note) {
         if let Some(ref current) = self.active_note {
             if current.id() == note.id() {
                 return;
@@ -146,22 +155,22 @@ impl GuiApp {
         self.active_tag = None;
     }
 
-    pub fn set_editing_tag(&mut self, index: usize) {
+    fn set_editing_tag(&mut self, index: usize) {
         self.active_tag = Some(index);
     }
 
-    pub fn set_adding_tag(&mut self) {
+    fn set_adding_tag(&mut self) {
         if let Some(ref mut note) = self.active_note {
             note.add_tag("New Tag".to_string());
             self.active_tag = Some(note.tag_len() - 1);
         }
     }
 
-    pub fn clear_editing_tag(&mut self) {
+    fn clear_editing_tag(&mut self) {
         self.active_tag = None;
     }
 
-    pub fn new_note(&mut self) {
+    fn new_note(&mut self) {
         if let Some(tx) = &self.front_tx {
             tx.send(ToBackend::CreateNote {
                 dto: (String::from("New Note"), String::new()).into(),
@@ -170,7 +179,7 @@ impl GuiApp {
         }
     }
 
-    pub fn update_active_note(&self) {
+    fn update_active_note(&self) {
         if let Some(ref note) = self.active_note {
             if let Some(ref tx) = self.front_tx {
                 tx.send(ToBackend::UpdateNote { note: note.clone() })
@@ -179,7 +188,7 @@ impl GuiApp {
         }
     }
 
-    pub fn delete_note(&mut self, id: TinyId) {
+    fn delete_note(&mut self, id: TinyId) {
         if let Some(ref active) = self.active_note {
             if active.id() == id {
                 self.active_note = None;
@@ -422,6 +431,30 @@ impl GuiApp {
                     });
             });
     }
+
+    pub(crate) fn render_exit_prompt(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
+        egui::Window::new("Save before exiting?")
+            .collapsible(false)
+            .resizable(false)
+            .show(ctx, |ui| {
+                ui.horizontal(|ui| {
+                    if ui.button("Yes").clicked() {
+                        self.save_data();
+                        self.exit_state = ExitState::Exiting;
+                        frame.quit();
+                    }
+
+                    if ui.button("No").clicked() {
+                        self.exit_state = ExitState::Exiting;
+                        frame.quit();
+                    }
+
+                    if ui.button("Cancel").clicked() {
+                        self.exit_state = ExitState::Running;
+                    }
+                });
+            });
+    }
 }
 
 impl eframe::App for GuiApp {
@@ -458,6 +491,16 @@ impl eframe::App for GuiApp {
             }
         }
 
+        match self.exit_state {
+            ExitState::Running => {}
+            ExitState::ExitRequested => {
+                self.render_exit_prompt(ctx, frame);
+            }
+            ExitState::Exiting => {
+                return;
+            }
+        }
+
         self.render_error_log(ctx, frame);
 
         if self.settings_open {
@@ -482,5 +525,43 @@ impl eframe::App for GuiApp {
 
     fn auto_save_interval(&self) -> std::time::Duration {
         std::time::Duration::from_secs(self.settings.autosave_interval)
+    }
+
+    fn on_exit_event(&mut self) -> bool {
+        if let Some(tx) = &mut self.front_tx {
+            tx.send(ToBackend::Shutdown)
+                .expect("Unable to send message to backend.");
+        }
+
+        if self.exit_state == ExitState::Running {
+            self.exit_state = ExitState::ExitRequested;
+        }
+
+        self.exit_state == ExitState::Exiting
+    }
+
+    fn max_size_points(&self) -> egui::Vec2 {
+        egui::Vec2::INFINITY
+    }
+
+    fn clear_color(&self, _visuals: &egui::Visuals) -> egui::Rgba {
+        // NOTE: a bright gray makes the shadows of the windows look weird.
+        // We use a bit of transparency so that if the user switches on the
+        // `transparent()` option they get immediate results.
+        egui::Color32::from_rgba_unmultiplied(12, 12, 12, 180).into()
+
+        // _visuals.window_fill() would also be a natural choice
+    }
+
+    fn persist_native_window(&self) -> bool {
+        true
+    }
+
+    fn persist_egui_memory(&self) -> bool {
+        true
+    }
+
+    fn warm_up_enabled(&self) -> bool {
+        false
     }
 }

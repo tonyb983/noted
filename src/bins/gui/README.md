@@ -1,0 +1,27 @@
+<!--
+ Copyright (c) 2022 Tony Barbitta
+ 
+ This Source Code Form is subject to the terms of the Mozilla Public
+ License, v. 2.0. If a copy of the MPL was not distributed with this
+ file, You can obtain one at http://mozilla.org/MPL/2.0/.
+-->
+
+# Noted - Gui Code
+
+This is my first foray into using the (very awesome) `egui` crate. So far here is what is going on:
+- `./backend/` - This backend structs lives on a separate thread from the UI and handles the database management. It converses with the frontend using the messages described by the `ToFrontend` and `ToBackend` enums in `./backend/msg.rs`.
+- `./widgets/` - This probably needs a better name, but is currently the place I'm keeping any front-end "components" in `react` terms, including the `screen_prompt.rs` file I shameless stole/borrowed from the very helpful [`mCubed repository`](https://github.com/4JX/mCubed/blob/77b646385d6be0e30885ae95e656a60a601ac120/main/src/ui/widgets/screen_prompt.rs). I have not actually tried to use the screen prompt, I think out of fear which is an odd feeling indeed, but it is planned to be used for things like "Are you sure you want to delete this note?", as I don't like the idea of having a "delete this note" command be permanent with no options for undo.
+- `./app.rs` - Currently this holds almost all of the active frontend / ui code. **This is terrible and needs to be addressed ASAP before it gets too much more out of hand**.
+- `./mod.rs` - The module file which contains the entry function that is called by the `gui` bin.
+- `./settings.rs` - The application / gui settings (`AppSettings`) that are used and saved by the app, as well as the `AppSettingsUi` which is a stateless struct that holds a function which renders the settings screen/panel in the ui. Currently, the `AppSettings` struct will look for a file in the project directory (as determined by the `directories` crate), and if it is not found a default will be created. This is probably an over-reach as far as responsibility and will likely change in the future.
+- `./theme.rs` - Another shameless copy from the very informative [`mCubed repo`](https://github.com/4JX/mCubed/blob/master/main/src/ui/app_theme.rs). I am not currently using this at all but have added it to my project as a starting point for when I start adding customized colors and whatnot.
+
+Here is my (probably hefty) todolist:
+- [ ] Start breaking down `app.rs` into multiple smaller "components" so that I don't have 20,000,000 methods all contained in one gigantic ui struct. First I need to decide on the best way to organize and handle the UI, now that I'm *starting* to get a better feel for the immediate mode gui style.
+- [ ] Look at the message passing implementation and handling, see if there's a way to make it better.
+- [ ] I have attempted to add notifications/toasts to the gui using the `egui_toast` crate, but could not get the integration to work (and subsequently deleted the code). I think I might know enough about `egui` at this point to implement my own very simplistic system for notifications, so lets take a crack at that.
+- [ ] I would like to look into implementing an undo-redo system (along with a trash-can / recycling bin type functionality). I **do** like that all data is saved in real-time, as it makes the app less likely to lose important things due an unexpected sudden termination, but having the option to undo and redo changes would be beneficial. I'm currently unsure if this should be something that is handled by the `crate::db::Database`, or if it should be an outside "monitoring" situation, but either way will require changes to the database type. From the start I have wanted to include change-tracking and change-logs into the Database type so these would go hand-in-hand and might be a good motivator to get that portion completed. 
+- [ ] While the GUI is working, there are many things that I am currently doing in a very ugly and hopefully temporary way. These need to be done better. I'll try to list these here as I come across / think of them:
+    - The note list side panel, currently each clickable note header is displayed as a button that is as big as the title text, I would like these to all be uniformly the same size, regardless of text length.
+    - Today (05/24/22) I added the `ExitState` enum and corresponding `GuiApp::exit_state` field on the main app struct, and while it is working as expected, this needs to be cleaned up and hopefully handled in a better way. Also, right now I am not honoring the `AppSettings::autosave_enabled` setting. I feel like changing this will open a whole can of worms which will lead to further issues. Currently any changes in a single note are written to the in-memory database in real time, this process could probably be batched for better performance, but might lead to more duplication between front and back end data.
+    - App-wide controls, including the settings button, an option to close and open a different note database, and perhaps a light-dark toggle button. Currently I have a bottom panel which is serving as an error log for any backend error messages so that they are not silently swallowed due to being in a separate thread. Luckily this gave me an opportunity to add a settings button, but I need a better place to store these app-wide controls. Perhaps a menu-bar along the top?
