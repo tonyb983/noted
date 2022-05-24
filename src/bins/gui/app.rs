@@ -15,6 +15,7 @@ use crate::types::Note;
 use super::{
     backend::{Backend, ToBackend, ToFrontend},
     settings::{AppSettings, AppSettingsUi},
+    widgets::NoteEditor,
 };
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -32,15 +33,14 @@ enum ExitState {
 
 pub struct GuiApp {
     notes: Vec<Note>,
-    active_note: Option<Note>,
-    active_tag: Option<usize>,
     state: AppState,
     settings: AppSettings,
     settings_open: bool,
-    front_tx: Option<Sender<ToBackend>>,
-    back_rx: Option<Receiver<ToFrontend>>,
+    front_tx: Sender<ToBackend>,
+    back_rx: Receiver<ToFrontend>,
     error_log: Vec<String>,
     exit_state: ExitState,
+    note_editor: NoteEditor,
 }
 
 impl GuiApp {
@@ -79,15 +79,14 @@ impl GuiApp {
 
         Self {
             notes,
-            active_note: None,
-            active_tag: None,
-            front_tx: Some(front_tx),
-            back_rx: Some(back_rx),
+            front_tx,
+            back_rx,
             state: AppState::NoDatabase,
             settings,
             settings_open: false,
             error_log: Vec::new(),
             exit_state: ExitState::Running,
+            note_editor: NoteEditor::default(),
         }
     }
 
@@ -124,81 +123,43 @@ impl GuiApp {
         ctx.set_fonts(fonts);
     }
 
-    fn new_db(&mut self, path: PathBuf) {
-        if let Some(tx) = &self.front_tx {
-            tx.send(ToBackend::CreateDatabase { path })
-                .expect("Unable to send create database message to backend");
-        }
+    fn new_db(&self, path: PathBuf) {
+        self.front_tx
+            .send(ToBackend::CreateDatabase { path })
+            .expect("Unable to send create database message to backend");
     }
 
     fn load_db(&mut self, path: PathBuf) {
-        if let Some(tx) = &self.front_tx {
-            tx.send(ToBackend::OpenDatabase { path })
-                .expect("Unable to send open database message to backend");
+        self.front_tx
+            .send(ToBackend::OpenDatabase { path })
+            .expect("Unable to send open database message to backend");
+    }
+
+    fn autosave(&self) {
+        if self.settings.autosave_enabled {
+            self.save_data();
         }
     }
 
-    fn save_data(&mut self) {
-        if let Some(tx) = &self.front_tx {
-            tx.send(ToBackend::SaveData)
-                .expect("Unable to send timed save message to backend");
-        }
-    }
-
-    fn set_active_note(&mut self, note: Note) {
-        if let Some(ref current) = self.active_note {
-            if current.id() == note.id() {
-                return;
-            }
-        }
-        self.active_note = Some(note);
-        self.active_tag = None;
-    }
-
-    fn set_editing_tag(&mut self, index: usize) {
-        self.active_tag = Some(index);
-    }
-
-    fn set_adding_tag(&mut self) {
-        if let Some(ref mut note) = self.active_note {
-            note.add_tag("New Tag".to_string());
-            self.active_tag = Some(note.tag_len() - 1);
-        }
-    }
-
-    fn clear_editing_tag(&mut self) {
-        self.active_tag = None;
+    fn save_data(&self) {
+        self.front_tx
+            .send(ToBackend::SaveData)
+            .expect("Unable to send timed save message to backend");
     }
 
     fn new_note(&mut self) {
-        if let Some(tx) = &self.front_tx {
-            tx.send(ToBackend::CreateNote {
+        self.front_tx
+            .send(ToBackend::CreateNote {
                 dto: (String::from("New Note"), String::new()).into(),
             })
             .expect("Unable to send new note message to backend");
-        }
     }
 
-    fn update_active_note(&self) {
-        if let Some(ref note) = self.active_note {
-            if let Some(ref tx) = self.front_tx {
-                tx.send(ToBackend::UpdateNote { note: note.clone() })
-                    .expect("Unable to send update note message to backend");
-            }
-        }
-    }
-
-    fn delete_note(&mut self, id: TinyId) {
-        if let Some(ref active) = self.active_note {
-            if active.id() == id {
-                self.active_note = None;
-                self.active_tag = None;
-            }
-        }
-        if let Some(tx) = &self.front_tx {
-            tx.send(ToBackend::DeleteNote { id })
-                .expect("Unable to send delete note message to backend");
-        }
+    fn delete_note_v2(&mut self, id: TinyId) {
+        self.note_editor.clear_if_active_id(id);
+        self.front_tx
+            .send(ToBackend::DeleteNote { id })
+            .expect("Unable to send delete note message to backend");
     }
 
     fn render_db_loaded(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
@@ -232,33 +193,27 @@ impl GuiApp {
                         }
                     });
                     if button.clicked() {
-                        self.active_note = Some(note.clone());
+                        self.note_editor.set_active_note(note);
                     }
                 }
             });
         });
-        let mut active = self.active_note.clone();
         egui::CentralPanel::default().show(ctx, |ui| {
             crate::profile_guard!("CentralPanel", "gui::GuiApp::update");
-            match active {
-                Some(ref mut note) => {
-                    note_changed = note_changed || Self::render_title(ui, note);
-                    note_changed = note_changed || Self::render_content(ui, note);
-                    note_changed = note_changed || self.render_tags(ui, note);
-                }
-                None => {
-                    ui.centered_and_justified(|ui| ui.label("Select a note to start editing!"));
-                }
-            }
+            self.note_editor.render(ui);
         });
 
-        if note_changed {
-            self.active_note = active;
-            self.update_active_note();
+        if self.note_editor.has_changes() {
+            if let Some(note) = self.note_editor.get_active_note() {
+                self.front_tx
+                    .send(ToBackend::UpdateNote { note: note.clone() })
+                    .unwrap();
+            }
+            self.note_editor.clear_has_changes();
         }
 
         if let Some(id) = delete_requested {
-            self.delete_note(id);
+            self.delete_note_v2(id);
         }
     }
 
@@ -301,98 +256,6 @@ impl GuiApp {
                 }
             }
         });
-    }
-
-    fn render_title(ui: &mut egui::Ui, note: &mut Note) -> bool {
-        let mut note_title = note.title().to_string();
-        let title_response = ui.text_edit_singleline(&mut note_title);
-        if title_response.changed() {
-            note.set_title(note_title.as_str());
-            return true;
-        }
-
-        false
-    }
-
-    fn render_content(ui: &mut egui::Ui, note: &mut Note) -> bool {
-        let mut note_content = note.content().to_string();
-        let content_response = ui.code_editor(&mut note_content);
-        if content_response.changed() {
-            note.set_content(note_content.as_str());
-            return true;
-        }
-        false
-    }
-
-    #[allow(clippy::collapsible_if)]
-    #[allow(clippy::collapsible_else_if)]
-    fn render_tags(&mut self, ui: &mut egui::Ui, note: &mut Note) -> bool {
-        let mut note_tags = note.tags().to_vec();
-        let mut removals = Vec::new();
-        let mut tags_changed = false;
-        ui.label("Tags:");
-
-        match self.active_tag {
-            None => {
-                for (i, tag) in note_tags.iter_mut().enumerate() {
-                    ui.horizontal(|ui| {
-                        let tag_response =
-                            ui.add(egui::Label::new(tag.as_str()).sense(egui::Sense::click()));
-                        if tag_response.double_clicked() {
-                            self.set_editing_tag(i);
-                        }
-                        if ui.small_button("x").clicked() {
-                            removals.push(i);
-                        }
-                    });
-                }
-
-                if ui.small_button("+").clicked() {
-                    self.set_adding_tag();
-                }
-            }
-            Some(idx) => {
-                for (i, tag) in note_tags.iter_mut().enumerate() {
-                    ui.horizontal(|ui| {
-                        if i == idx {
-                            let edit_response = ui.text_edit_singleline(tag);
-                            if edit_response.changed() {
-                                tags_changed = true;
-                            } else if edit_response.lost_focus() {
-                                self.clear_editing_tag();
-                            }
-                        } else {
-                            if ui.button(tag.as_str()).clicked() {
-                                self.set_editing_tag(i);
-                            }
-                        }
-                        if ui.small_button("x").clicked() {
-                            removals.push(i);
-                        }
-                    });
-                }
-
-                if ui.small_button("+").clicked() {
-                    self.set_adding_tag();
-                }
-            }
-        }
-
-        if !removals.is_empty() {
-            removals.sort_unstable();
-            removals.reverse();
-            for i in removals {
-                note_tags.remove(i);
-            }
-            tags_changed = true;
-        }
-
-        if tags_changed {
-            note.set_tags(note_tags);
-            return true;
-        }
-
-        false
     }
 
     fn render_error_log(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
@@ -457,37 +320,54 @@ impl GuiApp {
     }
 }
 
+fn tester_id() -> &'static egui::Id {
+    use once_cell::sync::OnceCell;
+    static ID: OnceCell<egui::Id> = OnceCell::new();
+    ID.get_or_init(|| egui::Id::new("tester").with(1234))
+}
+static mut FIRST: bool = true;
+
 impl eframe::App for GuiApp {
+    #[allow(clippy::cast_possible_truncation)]
     fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
         crate::profile_guard!("update", "gui::GuiApp");
 
-        if let Some(rx) = &self.back_rx {
-            match rx.try_recv() {
-                Ok(msg) => match msg {
-                    ToFrontend::RefreshNoteList { notes } => {
-                        self.notes = notes;
-                    }
-                    ToFrontend::Error { error_msg } => self.error_log.push(error_msg),
-                    ToFrontend::NoteCreated { note } => {
-                        self.active_note = Some(note);
-                        self.active_tag = None;
-                    }
-                    ToFrontend::DatabaseLoaded { notes } => {
-                        self.state = AppState::DatabaseOpen;
-                        self.notes = notes;
-                        self.active_note = None;
-                        self.active_tag = None;
-                    }
-                    ToFrontend::DatabaseClosed => {
-                        self.state = AppState::NoDatabase;
-                        self.notes = Vec::new();
-                        self.active_note = None;
-                        self.active_tag = None;
-                    }
-                },
-                Err(err) => {
-                    let _ = err;
+        let time = ctx.input().time;
+        let truncated = (time * 1000.0).trunc() / 1000.0;
+        let available = ctx.available_rect();
+        let animated = ctx.animate_value_with_time(*tester_id(), (time / 2.) as f32, 5.);
+        ctx.debug_painter().text(
+            egui::pos2(400., 50.),
+            egui::Align2::CENTER_CENTER,
+            format!(
+                "Time: {}\nAvailable: {:?}\nAnimated: {}",
+                truncated, available, animated
+            ),
+            egui::FontId::monospace(14.0),
+            egui::Color32::BLUE,
+        );
+
+        match self.back_rx.try_recv() {
+            Ok(msg) => match msg {
+                ToFrontend::RefreshNoteList { notes } => {
+                    self.notes = notes;
                 }
+                ToFrontend::Error { error_msg } => self.error_log.push(error_msg),
+                ToFrontend::NoteCreated { note } => {
+                    self.note_editor.set_active_note(&note);
+                }
+                ToFrontend::DatabaseLoaded { notes } => {
+                    self.state = AppState::DatabaseOpen;
+                    self.notes = notes;
+                }
+                ToFrontend::DatabaseClosed => {
+                    self.state = AppState::NoDatabase;
+                    self.notes = Vec::new();
+                    self.note_editor.clear_active_note();
+                }
+            },
+            Err(err) => {
+                let _ = err;
             }
         }
 
@@ -516,32 +396,31 @@ impl eframe::App for GuiApp {
 
     fn save(&mut self, _storage: &mut dyn eframe::Storage) {
         crate::profile_guard!("save", "gui::GuiApp");
-        self.save_data();
+        self.autosave();
     }
 
     fn on_exit(&mut self, _gl: &eframe::glow::Context) {
-        self.save_data();
+        // self.save_data();
     }
 
     fn auto_save_interval(&self) -> std::time::Duration {
-        std::time::Duration::from_secs(self.settings.autosave_interval)
+        if self.settings.autosave_enabled {
+            std::time::Duration::from_secs(self.settings.autosave_interval)
+        } else {
+            std::time::Duration::MAX
+        }
     }
 
     fn on_exit_event(&mut self) -> bool {
-        if let Some(tx) = &mut self.front_tx {
-            tx.send(ToBackend::Shutdown)
-                .expect("Unable to send message to backend.");
-        }
+        self.front_tx
+            .send(ToBackend::Shutdown)
+            .expect("Unable to send message to backend.");
 
         if self.exit_state == ExitState::Running {
             self.exit_state = ExitState::ExitRequested;
         }
 
         self.exit_state == ExitState::Exiting
-    }
-
-    fn max_size_points(&self) -> egui::Vec2 {
-        egui::Vec2::INFINITY
     }
 
     fn clear_color(&self, _visuals: &egui::Visuals) -> egui::Rgba {
@@ -551,17 +430,5 @@ impl eframe::App for GuiApp {
         egui::Color32::from_rgba_unmultiplied(12, 12, 12, 180).into()
 
         // _visuals.window_fill() would also be a natural choice
-    }
-
-    fn persist_native_window(&self) -> bool {
-        true
-    }
-
-    fn persist_egui_memory(&self) -> bool {
-        true
-    }
-
-    fn warm_up_enabled(&self) -> bool {
-        false
     }
 }

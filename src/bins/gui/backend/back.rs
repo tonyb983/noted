@@ -48,64 +48,21 @@ impl Backend {
                 match self.front_rx.recv() {
                     Ok(mut msg) => {
                         match msg {
-                            ToBackend::UpdateNote { ref mut note } => {
-                                if let Some(db) = &mut self.db {
-                                    db.ensure_sync_v2(note);
-                                    self.back_tx.send(ToFrontend::RefreshNoteList { notes: db.get_all().to_vec() }).expect("Unable to send message to frontend");
-                                } else {
-                                    error!("UpdateNote received but no database is open");
-                                    self.back_tx
-                                        .send(ToFrontend::Error {
-                                            error_msg: format!(
-                                                "Update Note requested but no database is open. Note: {:?}", note
-                                            ),
-                                        })
-                                        .expect("Unable to send message to frontend");
-                                }
-                            },
-                            ToBackend::CreateNote { ref dto } => {
-                                if let Some(db) = &mut self.db {
-                                    match db.apply_create(dto.clone()) {
-                                        Ok(created) => {
-                                            self.back_tx
-                                                .send(ToFrontend::NoteCreated { note: created })
-                                                .expect("Unable to send message to frontend");
-                                            self.back_tx.send(ToFrontend::RefreshNoteList { notes: db.get_all().to_vec() }).expect("Unable to send message to frontend");
-                                        },
-                                        Err(error) => error!(%error, ?dto, "Error while creating note from dto:"),
-                                    };
-                                } else {
-                                    error!("CreateNote received but no database is open");
-                                }
-                            },
-                            ToBackend::DeleteNote { id } => {
-                                if let Some(db) = &mut self.db {
-                                    match db.apply_delete(id) {
-                                        Ok(deleted) => if deleted {
-                                            self.back_tx.send(ToFrontend::RefreshNoteList { notes: db.get_all().to_vec() }).expect("Unable to send message to frontend");
-                                        } else {
-                                            self.back_tx.send(ToFrontend::Error { error_msg: "Unable to find and delete the given note.".to_string()}).expect("Unable to send message to frontend");
-                                        },
-                                        Err(err) => self.back_tx.send(ToFrontend::Error { error_msg: format!("Error deleting note with ID {}: {}", id, err)}).expect("Unable to send message to frontend"),
-                                    }
-                                } else {
-                                    error!(%id, "DeleteNote received but no database is open");
-                                    self.back_tx.send(ToFrontend::Error { error_msg: "Delete requested but no database is open!".to_string()}).expect("Unable to send message to frontend");
-                                }
-                            },
+                            ToBackend::UpdateNote { ref mut note } => self.update_note(note),
+                            ToBackend::CreateNote { ref dto } => self.create_note(dto),
+                            ToBackend::DeleteNote { id } => self.delete_note(id),
                             ToBackend::SaveData => self.save_data(),
                             ToBackend::Startup => {
                                 info!("Backend starting up");
                             },
                             ToBackend::Shutdown => {
-                                self.save_data();
+                                // self.save_data();
                                 info!("Backend shutting down");
                             },
                             ToBackend::CreateDatabase { path } => self.create_db(path),
                             ToBackend::OpenDatabase { path } => self.open_db(path),
                             ToBackend::CloseDatabase => self.close_db(),
                         }
-                        self.egui_context.request_repaint();
                     }
                     Err(error) => {
                          // As the only reason this will error out is if the channel is closed (sender is dropped) a one time log of the error is enough
@@ -121,7 +78,13 @@ impl Backend {
     fn save_data(&mut self) {
         if let Some(path) = &self.db_path {
             if let Some(db) = &mut self.db {
-                db.save(path).unwrap();
+                match db.save(path) {
+                    Ok(_) => info!("Database saved"),
+                    Err(error) => {
+                        error!(%error, "Error while saving database:");
+                        self.send_error(error);
+                    }
+                }
             }
         }
     }
@@ -135,12 +98,7 @@ impl Backend {
         self.db = Some(db);
         self.db_path = Some(path.to_path_buf());
         self.save_data();
-        // self.back_tx
-        //     .send(ToFrontend::RefreshNoteList { notes })
-        //     .expect("Unable to send message to frontend");
-        self.back_tx
-            .send(ToFrontend::DatabaseLoaded { notes })
-            .expect("Unable to send message to frontend");
+        self.send_msg(ToFrontend::DatabaseLoaded { notes });
     }
 
     fn open_db<P: AsRef<Path>>(&mut self, path: P) {
@@ -152,26 +110,14 @@ impl Backend {
                 let notes = db.get_all().to_vec();
                 self.db = Some(db);
                 self.db_path = Some(path.to_path_buf());
-                // self.back_tx
-                //     .send(ToFrontend::RefreshNoteList { notes })
-                //     .expect("Unable to send message to frontend");
-                self.back_tx
-                    .send(ToFrontend::DatabaseLoaded { notes })
-                    .expect("Unable to send message to frontend");
+                self.send_msg(ToFrontend::DatabaseLoaded { notes });
             }
             Err(error) => {
                 error!(%error, ?path, "Error while opening database:");
-                self.back_tx
-                    .send(ToFrontend::Error {
-                        error_msg: format!(
-                            "Error loading database at path '{}': {}",
-                            path.display(),
-                            error
-                        ),
-                    })
-                    .expect("Unable to send message to frontend");
+                self.send_error(error);
             }
         }
+        self.egui_context.request_repaint();
     }
 
     fn close_db(&mut self) {
@@ -179,12 +125,101 @@ impl Backend {
             self.save_data();
             self.db = None;
             self.db_path = None;
-            // self.back_tx
-            //     .send(ToFrontend::RefreshNoteList { notes: Vec::new() })
-            //     .expect("Unable to send message to frontend");
+            self.send_msg(ToFrontend::DatabaseClosed);
+            self.egui_context.request_repaint();
+        }
+    }
+
+    fn update_note(&mut self, note: &mut crate::types::Note) {
+        if let Some(db) = &mut self.db {
+            db.ensure_sync_v2(note);
+            let msg = ToFrontend::RefreshNoteList {
+                notes: db.get_all().to_vec(),
+            };
+            self.send_msg(msg);
+        } else {
+            error!("UpdateNote received but no database is open");
+            self.send_error_msg(format!(
+                "Update Note requested but no database is open. Note: {:?}",
+                note
+            ));
+        }
+        self.egui_context.request_repaint();
+    }
+
+    fn send_msg(&self, msg: ToFrontend) {
+        self.back_tx
+            .send(msg)
+            .expect("Unable to send message to frontend");
+    }
+
+    fn send_error(&self, err: impl std::error::Error + Send + Sync) {
+        self.back_tx
+            .send(ToFrontend::Error {
+                error_msg: format!("{}", err),
+            })
+            .expect("Unable to send error message to frontend");
+    }
+
+    #[allow(clippy::needless_pass_by_value)]
+    fn send_error_msg(&self, msg: impl ToString) {
+        self.back_tx
+            .send(ToFrontend::Error {
+                error_msg: msg.to_string(),
+            })
+            .expect("Unable to send error message to frontend");
+    }
+
+    fn create_note(&mut self, dto: &crate::types::CreateNote) {
+        if let Some(db) = &mut self.db {
+            let created = match db.apply_create(dto.clone()) {
+                Ok(created) => created,
+                Err(error) => {
+                    error!(%error, ?dto, "Error while creating note from dto:");
+                    self.send_error(error);
+                    return;
+                }
+            };
             self.back_tx
-                .send(ToFrontend::DatabaseClosed)
+                .send(ToFrontend::NoteCreated { note: created })
                 .expect("Unable to send message to frontend");
+            self.back_tx
+                .send(ToFrontend::RefreshNoteList {
+                    notes: db.get_all().to_vec(),
+                })
+                .expect("Unable to send message to frontend");
+            self.egui_context.request_repaint();
+        } else {
+            error!("CreateNote received but no database is open");
+            self.send_error_msg("CreateNote requested but no Database is open!");
+        }
+    }
+
+    fn delete_note(&mut self, id: tinyid::TinyId) {
+        if let Some(db) = &mut self.db {
+            match db.apply_delete(id) {
+                Ok(deleted) => {
+                    if deleted {
+                        self.back_tx
+                            .send(ToFrontend::RefreshNoteList {
+                                notes: db.get_all().to_vec(),
+                            })
+                            .expect("Unable to send message to frontend");
+                        self.egui_context.request_repaint();
+                    } else {
+                        self.send_error_msg(format!("Note with id '{}' not found", id));
+                    }
+                }
+                Err(err) => self
+                    .back_tx
+                    .send(ToFrontend::Error {
+                        error_msg: format!("Error deleting note with ID {}: {}", id, err),
+                    })
+                    .expect("Unable to send message to frontend"),
+            }
+        } else {
+            error!(%id, "DeleteNote received but no database is open");
+            self.send_error_msg("Delete requested but no database is open!");
         }
     }
 }
