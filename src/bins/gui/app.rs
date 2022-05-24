@@ -398,8 +398,9 @@ impl GuiApp {
                     egui::Layout::right_to_left(),
                     |ui| {
                         ui.style_mut().override_font_id = Some(egui::FontId::monospace(12.));
-                        // ui.style_mut().override_text_style = Some(egui::TextStyle::Monospace);
-                        if ui.button("\u{f013}").clicked() {
+                        ui.style_mut().override_text_style = Some(egui::TextStyle::Monospace);
+                        let label = egui::Label::new("\u{f013}").sense(egui::Sense::click());
+                        if ui.add(label).clicked() {
                             self.settings_open = !self.settings_open;
                         }
                         let log_label = egui::Label::new("Log").wrap(false);

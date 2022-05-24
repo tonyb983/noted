@@ -403,7 +403,7 @@ macro_rules! flame_all_tests {
     ([$($path_seg:expr),+ $(,)?], $($test_fns:ident),+ $(,)?) => {
         #[cfg(feature = "flame")]
         #[cfg_attr(feature = "flame", test)]
-        #[cfg_attr(coverage, feature(no_coverage))]
+        #[cfg_attr(coverage, ignore)]
         fn flame_all_tests() {
             $crate::flame_guard!($($path_seg),+);
             $({

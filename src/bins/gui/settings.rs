@@ -17,6 +17,7 @@ pub enum ValueType {
     Choice(Vec<String>),
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum AppSettingKind {
     DefaultDatabase,
     LoadDefaultOnStart,
@@ -26,13 +27,11 @@ pub enum AppSettingKind {
 }
 
 impl AppSettingKind {
-    pub fn get_value_type(&self) -> ValueType {
+    pub fn get_value_type(self) -> ValueType {
         match self {
-            AppSettingKind::DefaultDatabase => ValueType::Path,
-            AppSettingKind::LoadDefaultOnStart => ValueType::Bool,
-            AppSettingKind::DefaultSavePath => ValueType::Path,
+            AppSettingKind::DefaultDatabase | AppSettingKind::DefaultSavePath => ValueType::Path,
+            AppSettingKind::LoadDefaultOnStart | AppSettingKind::AutosaveEnabled => ValueType::Bool,
             AppSettingKind::AutosaveInterval => ValueType::Number,
-            AppSettingKind::AutosaveEnabled => ValueType::Bool,
         }
     }
 }
