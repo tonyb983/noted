@@ -4,7 +4,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-use time::OffsetDateTime;
+use time::{format_description::FormatItem, OffsetDateTime};
 
 #[allow(clippy::cast_sign_loss, reason = "We are verifying before casting")]
 fn abs_i64(x: i64) -> u64 {
@@ -119,6 +119,19 @@ pub fn humanize_timespan(dur: time::Duration) -> impl std::fmt::Display {
         /// TODO: Make this better
         dur.to_string()
     }
+}
+
+pub fn timestamp_to_string(timestamp: &OffsetDateTime) -> String {
+    use once_cell::sync::OnceCell;
+    static FORMAT: OnceCell<&'static [FormatItem<'static>]> = OnceCell::new();
+    let format = FORMAT.get_or_init(|| {
+        time::macros::format_description!(
+            "[month]-[day]-[year repr:last_two] [hour repr:12]:[minute]:[second][period]"
+        )
+    });
+    timestamp
+        .format(format)
+        .expect("Unable to format timestamp")
 }
 
 #[cfg(test)]

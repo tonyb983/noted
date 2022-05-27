@@ -45,6 +45,7 @@ egui_extras = { version = "0.18.0", features = [
     "serde",
     "svg",
 ] }
+egui_hotkey = "0.1.1"
 fastrand = "1.7.0"
 flame = { version = "0.2.2", optional = true }
 flamer = { version = "0.4.0", optional = true }

@@ -5,39 +5,52 @@
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 use crossbeam_channel::Sender;
-use eframe::egui;
+use eframe::egui::{self, TextEdit};
 use egui_commonmark::{CommonMarkCache, CommonMarkViewer};
 use tinyid::TinyId;
 
 use crate::types::Note;
 
-use super::ToApp;
+use super::{super::settings::AppSettings, ToApp, WidgetState};
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+enum PreviewState {
+    Open,
+    Closed,
+}
 
 pub struct NoteEditor {
-    active: bool,
+    active: WidgetState,
     active_note: Option<Note>,
     active_tag: Option<usize>,
     md_cache: CommonMarkCache,
     has_changes: bool,
-    preview_open: bool,
+    preview_state: PreviewState,
     app_sender: Sender<ToApp>,
+    humanize_dates: bool,
 }
 
 impl NoteEditor {
-    pub fn new(app_sender: Sender<ToApp>, note: Option<Note>, active: bool) -> Self {
+    pub fn new(
+        app_sender: Sender<ToApp>,
+        note: Option<Note>,
+        active: bool,
+        settings: &AppSettings,
+    ) -> Self {
         Self {
             app_sender,
-            active,
+            active: active.into(),
             active_note: note,
             active_tag: None,
             has_changes: false,
-            preview_open: false,
+            preview_state: PreviewState::Closed,
             md_cache: CommonMarkCache::default(),
+            humanize_dates: true,
         }
     }
 
     pub fn render(&mut self, ui: &mut egui::Ui) {
-        if !self.active {
+        if self.active.is_disabled() {
             return;
         }
 
@@ -45,19 +58,28 @@ impl NoteEditor {
         let mut active_note = match &self.active_note {
             Some(note) => note.clone(),
             None => {
-                ui.horizontal_centered(|ui| {
-                    if ui.button("Create Note").clicked() {
-                        self.app_sender.send(ToApp::CreateNewNote).unwrap();
-                    }
-                    ui.label("Or select an existing note to start editing.");
+                let max_rect = ui.max_rect();
+                let shrink_x = max_rect.max.x / 4.;
+                let shrink_y = max_rect.max.y / 4.;
+                ui.allocate_ui_at_rect(max_rect.shrink2(egui::vec2(shrink_x, shrink_y)), |ui| {
+                    ui.vertical_centered(|ui| {
+                        if ui.button("Create Note").clicked() {
+                            self.app_sender.send(ToApp::CreateNewNote).unwrap();
+                        }
+                        ui.label("Or select an existing note to start editing.");
+                    });
                 });
                 return;
             }
         };
 
         changes |= self.render_title_editor(ui, &mut active_note);
+        ui.add(egui::Separator::default().horizontal().spacing(30.));
         changes |= self.render_content_editor(ui, &mut active_note);
+        ui.add(egui::Separator::default().horizontal().spacing(30.));
         changes |= self.render_tags_editor(ui, &mut active_note);
+        ui.add(egui::Separator::default().horizontal().spacing(30.));
+        self.render_metadata(ui, &mut active_note);
 
         if changes {
             self.active_note = Some(active_note);
@@ -77,7 +99,7 @@ impl NoteEditor {
         self.active_tag = None;
         self.active_note = None;
         self.has_changes = false;
-        self.preview_open = false;
+        self.preview_state = PreviewState::Closed;
     }
 
     pub fn clear_if_active(&mut self, note: &Note) {
@@ -93,7 +115,7 @@ impl NoteEditor {
     }
 
     pub fn set_active(&mut self, state: bool) {
-        self.active = state;
+        self.active = state.into();
     }
 
     pub fn set_note(&mut self, note: Option<Note>) {
@@ -106,11 +128,11 @@ impl NoteEditor {
         self.active_note = note;
         self.active_tag = None;
         self.has_changes = false;
-        self.preview_open = false;
+        self.preview_state = PreviewState::Closed;
     }
 
     pub fn is_active(&self) -> bool {
-        self.active
+        self.active.is_enabled()
     }
 
     pub fn has_changes(&self) -> bool {
@@ -120,13 +142,19 @@ impl NoteEditor {
     pub fn clear_has_changes(&mut self) {
         self.has_changes = false;
     }
+
+    pub fn settings_updated(&mut self, settings: &AppSettings) {
+        self.humanize_dates = settings.humanize_dates;
+    }
 }
 
 impl NoteEditor {
     #[allow(clippy::unused_self)]
     fn render_title_editor(&self, ui: &mut egui::Ui, note: &mut Note) -> bool {
         let mut note_title = note.title().to_string();
-        let title_response = ui.text_edit_singleline(&mut note_title);
+        let title_response =
+            ui.add(TextEdit::singleline(&mut note_title).font(egui::TextStyle::Heading));
+        // let title_response = ui.text_edit_singleline(&mut note_title);
         if title_response.changed() {
             note.set_title(note_title.as_str());
             return true;
@@ -138,22 +166,41 @@ impl NoteEditor {
     #[allow(clippy::unused_self)]
     fn render_content_editor(&mut self, ui: &mut egui::Ui, note: &mut Note) -> bool {
         let mut note_content = note.content().to_string();
+        let mut preview_open = self.preview_state == PreviewState::Open;
 
         ui.horizontal_top(|ui| {
-            ui.toggle_value(&mut self.preview_open, "View Markdown");
+            if ui
+                .toggle_value(
+                    &mut preview_open,
+                    match self.preview_state {
+                        PreviewState::Open => "Hide Markdown Preview",
+                        PreviewState::Closed => "Show Markdown Preview",
+                    },
+                )
+                .clicked()
+            {
+                self.preview_state = if preview_open {
+                    PreviewState::Open
+                } else {
+                    PreviewState::Closed
+                };
+            }
         });
 
-        if self.preview_open {
-            CommonMarkViewer::new("note_content_viewer").show(
-                ui,
-                &mut self.md_cache,
-                note_content.as_str(),
-            );
-        } else {
-            let content_response = ui.code_editor(&mut note_content);
-            if content_response.changed() {
-                note.set_content(note_content.as_str());
-                return true;
+        match self.preview_state {
+            PreviewState::Open => {
+                CommonMarkViewer::new("note_content_viewer").show(
+                    ui,
+                    &mut self.md_cache,
+                    note_content.as_str(),
+                );
+            }
+            PreviewState::Closed => {
+                let content_response = ui.code_editor(&mut note_content);
+                if content_response.changed() {
+                    note.set_content(note_content.as_str());
+                    return true;
+                }
             }
         }
 
@@ -236,5 +283,30 @@ impl NoteEditor {
         }
 
         false
+    }
+
+    #[allow(clippy::unused_self)]
+    fn render_metadata(&mut self, ui: &mut egui::Ui, note: &mut Note) {
+        ui.horizontal(|ui| {
+            let height = ui.text_style_height(&egui::TextStyle::Body);
+            ui.set_height(height);
+            ui.horizontal_centered(|ui| {
+                if self.humanize_dates {
+                    ui.label(format!("Created: {}", note.created_humanized()));
+                    ui.label("|");
+                    ui.label(format!("Updated: {}", note.updated_humanized()));
+                } else {
+                    ui.label(format!(
+                        "Created: {}",
+                        crate::util::dtf::timestamp_to_string(note.created())
+                    ));
+                    ui.label("|");
+                    ui.label(format!(
+                        "Updated: {}",
+                        crate::util::dtf::timestamp_to_string(note.updated())
+                    ));
+                }
+            });
+        });
     }
 }

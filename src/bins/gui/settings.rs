@@ -25,16 +25,23 @@ pub enum AppSettingKind {
     DefaultSavePath,
     AutosaveEnabled,
     AutosaveInterval,
+    HumanizeDates,
 }
 
 impl AppSettingKind {
     pub fn get_value_type(self) -> ValueType {
         match self {
             AppSettingKind::DefaultDatabase | AppSettingKind::DefaultSavePath => ValueType::Path,
-            AppSettingKind::LoadDefaultOnStart | AppSettingKind::AutosaveEnabled => ValueType::Bool,
+            AppSettingKind::LoadDefaultOnStart
+            | AppSettingKind::AutosaveEnabled
+            | AppSettingKind::HumanizeDates => ValueType::Bool,
             AppSettingKind::AutosaveInterval => ValueType::Number,
         }
     }
+}
+
+fn default_humanize() -> bool {
+    true
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -47,7 +54,11 @@ pub struct AppSettings {
     pub autosave_interval: u64,
     /// Whether the default Database should be loaded on start
     pub load_default_on_start: bool,
+    /// Whether autosave of changes is enabled
     pub autosave_enabled: bool,
+    /// Whether dates should be humanized or displayed as raw timestamps
+    #[serde(default = "default_humanize")]
+    pub humanize_dates: bool,
 }
 
 impl AppSettings {
@@ -71,6 +82,7 @@ impl AppSettings {
             autosave_interval: 30,
             load_default_on_start: true,
             autosave_enabled: true,
+            humanize_dates: true,
         };
 
         Ok(config)
@@ -133,6 +145,7 @@ impl AppSettings {
             AppSettingKind::DefaultSavePath => self.default_save_path.display().to_string(),
             AppSettingKind::AutosaveInterval => self.autosave_interval.to_string(),
             AppSettingKind::AutosaveEnabled => self.autosave_enabled.to_string(),
+            AppSettingKind::HumanizeDates => self.humanize_dates.to_string(),
         }
     }
 
@@ -156,6 +169,10 @@ impl AppSettings {
             }
             AppSettingKind::AutosaveEnabled => {
                 self.autosave_enabled = value.parse().ok()?;
+                Some(())
+            }
+            AppSettingKind::HumanizeDates => {
+                self.humanize_dates = value.parse().ok()?;
                 Some(())
             }
         }
@@ -211,8 +228,15 @@ impl AppSettingsUi {
             });
         });
 
-        ui.separator();
         ui.indent(id.with("body"), |ui| {
+            let hd_res = ui.checkbox(
+                &mut settings.humanize_dates,
+                "Humanize Dates & Times (Otherwise they will be displayed as raw timestamps)",
+            );
+            if hd_res.changed {
+                has_changed = true;
+            }
+
             let ldos_res = ui.checkbox(
                 &mut settings.load_default_on_start,
                 "Load default database on application start",

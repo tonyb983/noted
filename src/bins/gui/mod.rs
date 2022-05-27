@@ -6,6 +6,7 @@
 
 mod app;
 mod backend;
+mod hotkey;
 mod settings;
 mod theme;
 mod widgets;

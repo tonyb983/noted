@@ -15,6 +15,7 @@ use crate::types::Note;
 
 use super::{
     backend::{Backend, ToBackend, ToFrontend},
+    hotkey::{HotkeyEditor, HotkeyState, Hotkeys},
     settings::{AppSettings, AppSettingsUi},
     widgets::{NoteEditor, SimplePrompt, ToApp},
 };
@@ -81,6 +82,7 @@ pub struct GuiApp {
     toast_rx: Receiver<Toast>,
     deleting_state: DeletingState,
     time: f64,
+    hotkeys: Hotkeys,
 }
 
 impl GuiApp {
@@ -95,7 +97,7 @@ impl GuiApp {
         let (widget_tx, widget_rx) = crossbeam_channel::unbounded();
         let (toast_tx, toast_rx) = crossbeam_channel::unbounded();
 
-        let note_editor = NoteEditor::new(widget_tx.clone(), None, true);
+        let note_editor = NoteEditor::new(widget_tx.clone(), None, true, &settings);
 
         let frame_clone = cc.egui_ctx.clone();
         std::thread::spawn(move || {
@@ -143,6 +145,7 @@ impl GuiApp {
             time: cc.egui_ctx.input().time,
             toast_rx,
             toast_tx,
+            hotkeys: Hotkeys::default(),
         }
     }
 
@@ -235,6 +238,50 @@ impl GuiApp {
             .expect("Unable to send delete note message to backend");
     }
 
+    fn check_hotkeys(&mut self, ctx: &egui::Context) {
+        let state = self.hotkeys.check_hotkeys(ctx);
+        if state.new_note {
+            self.new_note();
+        }
+        if state.close_note_editor {
+            self.change_active_note(None);
+        }
+        if state.delete {
+            if let Some(note) = self.note_editor.get_active_note() {
+                self.deleting_state = DeletingState::Prompting(note.id());
+            }
+        }
+        if state.quit {
+            self.exit_state = ExitState::ExitRequested;
+        }
+        if state.toggle_settings {
+            self.settings_open = !self.settings_open;
+        }
+        if state.save {
+            self.save_data();
+        }
+        if state.copy {
+            // TODO: Implement copying for text AND notes
+            self.error_log.push("COPY hotkey pressed.".to_string());
+        }
+        if state.cut {
+            // TODO: Implement cutting for text AND notes
+            self.error_log.push("CUT hotkey pressed.".to_string());
+        }
+        if state.paste {
+            // TODO: Implement pasting for text AND notes
+            self.error_log.push("PASTE hotkey pressed.".to_string());
+        }
+        if state.undo {
+            // TODO: Implement undo/redo
+            self.error_log.push("UNDO hotkey pressed.".to_string());
+        }
+        if state.redo {
+            // TODO: Implement undo/redo
+            self.error_log.push("REDO hotkey pressed.".to_string());
+        }
+    }
+
     fn render_db_loaded(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
         // let mut delete_requested = None;
         let mut change_active = None;
@@ -245,30 +292,52 @@ impl GuiApp {
         side_panel.show(ctx, |ui| {
             crate::profile_guard!("SidePanel", "gui::GuiApp::update");
             let side_width = ui.available_width();
-            let side_width = side_width.min(100.0);
             ui.allocate_ui_with_layout(
-                egui::Vec2::new(side_width, 50.),
-                egui::Layout::centered_and_justified(egui::Direction::LeftToRight),
+                egui::Vec2::new(side_width, 30.),
+                egui::Layout::right_to_left(),
                 |ui| {
-                    ui.heading(egui::RichText::new("Notes").heading());
-                    if ui.button("New Note").clicked() {
+                    if ui.button("+").clicked() {
                         self.new_note();
                     }
+                    ui.allocate_ui_with_layout(
+                        ui.available_size(),
+                        egui::Layout::centered_and_justified(egui::Direction::TopDown),
+                        |ui| {
+                            ui.heading(egui::RichText::new("Notes").heading());
+                        },
+                    );
                 },
             );
             ui.separator();
             egui::ScrollArea::vertical().show(ui, |ui| {
-                for (i, note) in self.notes.iter().enumerate() {
-                    let button = ui.button(note.title()).context_menu(|ui| {
-                        if ui.small_button("Delete this note.").clicked() {
-                            self.deleting_state = DeletingState::Prompting(note.id());
-                            ui.close_menu();
+                let max_width = ui.available_width();
+                egui::Grid::new("note_selection_grid")
+                    .num_columns(1)
+                    .max_col_width(max_width)
+                    .min_col_width(max_width)
+                    .min_row_height(15.)
+                    .show(ui, |ui| {
+                        for (i, note) in self.notes.iter().enumerate() {
+                            let button = egui::Button::new(note.title()).wrap(true);
+                            ui.allocate_ui_with_layout(
+                                [max_width, 75.].into(),
+                                egui::Layout::top_down_justified(egui::Align::Center),
+                                |ui| {
+                                    let res = ui.add(button).context_menu(|ui| {
+                                        if ui.small_button("Delete this note.").clicked() {
+                                            self.deleting_state =
+                                                DeletingState::Prompting(note.id());
+                                            ui.close_menu();
+                                        }
+                                    });
+                                    if res.clicked() {
+                                        change_active = Some(note.clone());
+                                    }
+                                },
+                            );
+                            ui.end_row();
                         }
                     });
-                    if button.clicked() {
-                        change_active = Some(note.clone());
-                    }
-                }
             });
         });
 
@@ -341,7 +410,11 @@ impl GuiApp {
                 if let Err(err) = self.settings.save_default() {
                     self.error_log.push(err.to_string());
                 }
+                self.note_editor.settings_updated(&self.settings);
             }
+
+            //ui.separator();
+            HotkeyEditor::render(ui, &mut self.hotkeys);
         });
     }
 
@@ -356,6 +429,7 @@ impl GuiApp {
                     egui::Vec2::new(width, 30.),
                     egui::Layout::right_to_left(),
                     |ui| {
+                        ui.add_space(10.);
                         ui.style_mut().override_font_id = Some(egui::FontId::monospace(12.));
                         ui.style_mut().override_text_style = Some(egui::TextStyle::Monospace);
                         let label = egui::Label::new("\u{f013}").sense(egui::Sense::click());
@@ -363,23 +437,34 @@ impl GuiApp {
                             self.settings_open = !self.settings_open;
                         }
                         let log_label = egui::Label::new("Log").wrap(false);
-                        let space = ui.available_width() - 40.0;
+                        let space = ui.available_width() - 50.0;
                         ui.add_space(space);
                         ui.label("Log");
                         ui.reset_style();
                     },
                 );
-                let text_style = egui::TextStyle::Body;
-                let row_height = ui.text_style_height(&text_style) * 2.;
                 ui.centered_and_justified(|ui| {
                     egui::ScrollArea::vertical()
                         .stick_to_bottom()
                         .hscroll(false)
-                        .show_rows(ui, row_height, self.error_log.len(), |ui, range| {
-                            for i in range {
-                                ui.add(egui::Label::new(&self.error_log[i]));
-                            }
+                        .show(ui, |ui| {
+                            let width = ui.available_width();
+                            egui::Grid::new("error_log_grid")
+                                .num_columns(1)
+                                .striped(true)
+                                .max_col_width(width)
+                                .show(ui, |ui| {
+                                    for error in &self.error_log {
+                                        ui.label(error);
+                                        ui.end_row();
+                                    }
+                                });
                         });
+                    // .show_rows(ui, row_height, self.error_log.len(), |ui, range| {
+                    //     for i in range {
+                    //         ui.add(egui::Label::new(&self.error_log[i]));
+                    //     }
+                    // });
                 })
             });
     }
@@ -513,6 +598,8 @@ impl eframe::App for GuiApp {
                 }
             }
         }
+
+        self.check_hotkeys(ctx);
 
         match self.exit_state {
             ExitState::Running => {}
