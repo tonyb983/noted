@@ -1,13 +1,7 @@
-// Copyright (c) 2022 Tony Barbitta
-//
-// This Source Code Form is subject to the terms of the Mozilla Public
-// License, v. 2.0. If a copy of the MPL was not distributed with this
-// file, You can obtain one at http://mozilla.org/MPL/2.0/.
-
 use std::hash::Hash;
 
 use eframe::{
-    egui::{Area, Context, Frame, Id, InnerResponse, Order, Sense, Ui},
+    egui::{Area, Context, Frame, Id, InnerResponse, Layout, Order, Sense, Ui},
     emath::{Align2, Pos2, Vec2},
     epaint::{Color32, Rounding, Shape},
 };
@@ -21,6 +15,7 @@ pub struct ScreenPrompt {
     prompt_frame: Frame,
     bg_overlay_color: Color32,
     outside_click_closes: bool,
+    min_size: Vec2,
 }
 
 #[derive(Clone, Default, Debug, Copy, Deserialize, Serialize)]
@@ -37,12 +32,20 @@ impl State {
 impl ScreenPrompt {
     const PROMPT_BASE_ID: &'static str = "ui_prompt";
 
-    pub fn new(name: impl Hash) -> Self {
+    pub fn new(name: impl Hash, min_size: Vec2) -> Self {
         Self {
             id: Id::new(Self::PROMPT_BASE_ID).with(name),
             prompt_frame: get_app_theme().prompt_frame,
             bg_overlay_color: Color32::from_black_alpha(200),
             outside_click_closes: false,
+            min_size,
+        }
+    }
+
+    pub fn outside_click_closes(self, outside_click_closes: bool) -> Self {
+        Self {
+            outside_click_closes,
+            ..self
         }
     }
 
@@ -78,13 +81,24 @@ impl ScreenPrompt {
                     ));
 
                     let prompt_area_res = Area::new("prompt_centered")
-                        .fixed_pos(Pos2::ZERO)
                         .anchor(Align2::CENTER_CENTER, Vec2::splat(0.0))
                         .order(Order::Foreground)
                         .show(ctx, |ui| {
-                            let InnerResponse { inner, .. } = self
-                                .prompt_frame
-                                .show(ui, |ui| add_contents(ui, &mut state));
+                            let InnerResponse { inner, .. } = self.prompt_frame.show(ui, |ui| {
+                                // let inner_rect = screen_rect.shrink(50.0);
+                                ui.set_min_size(self.min_size);
+                                ui.allocate_ui_with_layout(
+                                    self.min_size,
+                                    Layout::top_down(eframe::emath::Align::Center),
+                                    |ui| add_contents(ui, &mut state),
+                                )
+                                .inner
+                                // ui.allocate_ui_at_rect(inner_rect, |ui| {
+                                //     ui.centered_and_justified(|ui| add_contents(ui, &mut state))
+                                //         .inner
+                                // })
+                                // .inner
+                            });
 
                             inner
                         });
@@ -92,6 +106,18 @@ impl ScreenPrompt {
                     if prompt_area_res.response.clicked_elsewhere() && self.outside_click_closes {
                         state.is_shown = false;
                     };
+
+                    // ui.painter().debug_rect(
+                    //     screen_rect,
+                    //     Color32::YELLOW.linear_multiply(0.5),
+                    //     "screen_rect",
+                    // );
+
+                    // ui.painter().debug_rect(
+                    //     screen_rect.shrink(50.0),
+                    //     Color32::GREEN.linear_multiply(0.5),
+                    //     "screen_rect.shrink(50.0)",
+                    // );
 
                     prompt_area_res.inner
                 });

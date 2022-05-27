@@ -7,6 +7,7 @@
 use std::path::{Path, PathBuf};
 
 use directories::ProjectDirs;
+use eframe::egui;
 use serde::{Deserialize, Serialize};
 
 pub enum ValueType {

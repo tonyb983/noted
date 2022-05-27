@@ -4,31 +4,38 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
+use crossbeam_channel::Sender;
+use eframe::egui;
+use egui_commonmark::{CommonMarkCache, CommonMarkViewer};
 use tinyid::TinyId;
 
 use crate::types::Note;
 
-#[derive(Debug, Clone)]
+use super::ToApp;
+
 pub struct NoteEditor {
     active: bool,
     active_note: Option<Note>,
     active_tag: Option<usize>,
+    md_cache: CommonMarkCache,
     has_changes: bool,
-}
-
-#[allow(clippy::derivable_impls)]
-impl Default for NoteEditor {
-    fn default() -> Self {
-        Self {
-            active: true,
-            active_note: None,
-            active_tag: None,
-            has_changes: false,
-        }
-    }
+    preview_open: bool,
+    app_sender: Sender<ToApp>,
 }
 
 impl NoteEditor {
+    pub fn new(app_sender: Sender<ToApp>, note: Option<Note>, active: bool) -> Self {
+        Self {
+            app_sender,
+            active,
+            active_note: note,
+            active_tag: None,
+            has_changes: false,
+            preview_open: false,
+            md_cache: CommonMarkCache::default(),
+        }
+    }
+
     pub fn render(&mut self, ui: &mut egui::Ui) {
         if !self.active {
             return;
@@ -38,10 +45,12 @@ impl NoteEditor {
         let mut active_note = match &self.active_note {
             Some(note) => note.clone(),
             None => {
-                ui.centered_and_justified(|ui| {
-                    if ui.button("Select a note to start editing!").clicked() {}
+                ui.horizontal_centered(|ui| {
+                    if ui.button("Create Note").clicked() {
+                        self.app_sender.send(ToApp::CreateNewNote).unwrap();
+                    }
+                    ui.label("Or select an existing note to start editing.");
                 });
-                ui.centered_and_justified(|ui| ui.label("Select a note to start editing!"));
                 return;
             }
         };
@@ -60,22 +69,15 @@ impl NoteEditor {
         self.active_note.as_ref()
     }
 
-    pub fn set_active_note(&mut self, note: &Note) {
-        if let Some(ref current) = self.active_note {
-            if current.id() == note.id() {
-                return;
-            }
-        }
-
-        self.active_note = Some(note.clone());
-        self.active_tag = None;
-        self.has_changes = false;
+    pub fn has_active_note(&self) -> bool {
+        self.active_note.is_some()
     }
 
-    pub fn clear_active_note(&mut self) {
+    pub fn clear_note(&mut self) {
         self.active_tag = None;
         self.active_note = None;
         self.has_changes = false;
+        self.preview_open = false;
     }
 
     pub fn clear_if_active(&mut self, note: &Note) {
@@ -85,13 +87,26 @@ impl NoteEditor {
     pub fn clear_if_active_id(&mut self, id: TinyId) {
         if let Some(ref current) = self.active_note {
             if current.id() == id {
-                self.clear_active_note();
+                self.clear_note();
             }
         }
     }
 
     pub fn set_active(&mut self, state: bool) {
         self.active = state;
+    }
+
+    pub fn set_note(&mut self, note: Option<Note>) {
+        if let (Some(n), Some(curr)) = (&note, &self.active_note) {
+            if n.id() == curr.id() {
+                return;
+            }
+        }
+
+        self.active_note = note;
+        self.active_tag = None;
+        self.has_changes = false;
+        self.preview_open = false;
     }
 
     pub fn is_active(&self) -> bool {
@@ -121,13 +136,27 @@ impl NoteEditor {
     }
 
     #[allow(clippy::unused_self)]
-    fn render_content_editor(&self, ui: &mut egui::Ui, note: &mut Note) -> bool {
+    fn render_content_editor(&mut self, ui: &mut egui::Ui, note: &mut Note) -> bool {
         let mut note_content = note.content().to_string();
-        let content_response = ui.code_editor(&mut note_content);
-        if content_response.changed() {
-            note.set_content(note_content.as_str());
-            return true;
+
+        ui.horizontal_top(|ui| {
+            ui.toggle_value(&mut self.preview_open, "View Markdown");
+        });
+
+        if self.preview_open {
+            CommonMarkViewer::new("note_content_viewer").show(
+                ui,
+                &mut self.md_cache,
+                note_content.as_str(),
+            );
+        } else {
+            let content_response = ui.code_editor(&mut note_content);
+            if content_response.changed() {
+                note.set_content(note_content.as_str());
+                return true;
+            }
         }
+
         false
     }
 

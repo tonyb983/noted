@@ -11,6 +11,12 @@
 //!
 //! ```
 //!
+use std::collections::VecDeque;
+
+use eframe::{
+    egui::{self, Area, Context, Id, Order, Ui},
+    emath::{vec2, Align2},
+};
 
 pub enum ToastKind {
     Info,
@@ -20,18 +26,32 @@ pub enum ToastKind {
 }
 
 pub struct Toast {
-    pub id: egui::Id,
+    pub id: Id,
     pub kind: ToastKind,
     pub text: String,
     pub duration: f32,
 }
 
 pub struct Toaster {
-    anchor: egui::Align2,
+    anchor: Align2,
+    toasts: VecDeque<Toast>,
 }
 
 impl Toaster {
+    const TOAST_AREA_ID: &'static str = "noted_toaster_area";
     const TOAST_ID_BASE: &'static str = "noted_toast";
-}
 
-fn tester() {}
+    pub fn render(&mut self, ctx: &Context) {
+        // let bottom_right = ctx.input().screen_rect();
+        Area::new(Self::TOAST_AREA_ID)
+            .anchor(Align2::RIGHT_BOTTOM, vec2(-5.0, -5.0))
+            .interactable(false)
+            .movable(false)
+            .order(Order::Foreground)
+            .show(ctx, |ui| {
+                for toast in self.toasts.iter_mut().take(5) {
+                    ui.label(toast.text.as_str());
+                }
+            });
+    }
+}

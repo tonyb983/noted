@@ -7,6 +7,7 @@
 use std::path::{Path, PathBuf};
 
 use crossbeam_channel::{Receiver, Sender};
+use eframe::egui;
 use parking_lot::Once;
 use tracing::{debug, error, info};
 

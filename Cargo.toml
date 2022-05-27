@@ -32,8 +32,13 @@ eframe = { version = "0.18.0", features = [
     "serde",
     "persistence",
 ] }
-egui = { version = "0.18.1", features = ["serde", "tracing", "persistence"] }
+# egui = { version = "0.18.1", features = ["serde", "tracing", "persistence"] }
 egui-toast = "0.2.0"
+egui_commonmark = { version = "0.2.0", features = [
+    "fetch",
+    "svg",
+    "syntax_highlighting",
+] }
 egui_extras = { version = "0.18.0", features = [
     "datepicker",
     "image",
