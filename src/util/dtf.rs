@@ -7,8 +7,7 @@
 use time::{format_description::FormatItem, OffsetDateTime};
 
 #[allow(clippy::cast_sign_loss, reason = "We are verifying before casting")]
-fn abs_i64(x: i64) -> u64 {
-    crate::flame_guard!("util", "dtf", "abs_i64");
+const fn abs_i64(x: i64) -> u64 {
     if x < 0 {
         -x as u64
     } else {
@@ -16,18 +15,21 @@ fn abs_i64(x: i64) -> u64 {
     }
 }
 
+#[tracing::instrument]
 #[must_use]
 pub fn humanize_timespan_to_now(dt: OffsetDateTime) -> impl std::fmt::Display {
     crate::flame_guard!("util", "dtf", "humanize_timespan_to_now");
     humanize_timespan_between(dt, OffsetDateTime::now_utc())
 }
 
+#[tracing::instrument]
 #[must_use]
 pub fn humanize_timespan_from_now(dt: OffsetDateTime) -> impl std::fmt::Display {
     crate::flame_guard!("util", "dtf", "humanize_timespan_from_now");
     humanize_timespan_between(OffsetDateTime::now_utc(), dt)
 }
 
+#[tracing::instrument]
 #[must_use]
 pub fn humanize_timespan_between(
     from: OffsetDateTime,
@@ -38,6 +40,7 @@ pub fn humanize_timespan_between(
     humanize_timespan(diff)
 }
 
+#[tracing::instrument]
 #[must_use]
 pub fn humanize_timespan(dur: time::Duration) -> impl std::fmt::Display {
     const MINUTE: u64 = 60;
@@ -121,12 +124,29 @@ pub fn humanize_timespan(dur: time::Duration) -> impl std::fmt::Display {
     }
 }
 
+#[tracing::instrument]
+#[must_use]
 pub fn timestamp_to_string(timestamp: &OffsetDateTime) -> String {
     use once_cell::sync::OnceCell;
     static FORMAT: OnceCell<&'static [FormatItem<'static>]> = OnceCell::new();
     let format = FORMAT.get_or_init(|| {
         time::macros::format_description!(
             "[month]-[day]-[year repr:last_two] [hour repr:12]:[minute]:[second][period]"
+        )
+    });
+    timestamp
+        .format(format)
+        .expect("Unable to format timestamp")
+}
+
+#[tracing::instrument]
+#[must_use]
+pub fn short_datetime(timestamp: &OffsetDateTime) -> String {
+    use once_cell::sync::OnceCell;
+    static FORMAT: OnceCell<&'static [FormatItem<'static>]> = OnceCell::new();
+    let format = FORMAT.get_or_init(|| {
+        time::macros::format_description!(
+            "[month]-[day]-[year repr:last_two] [hour repr:12]:[minute][period]"
         )
     });
     timestamp

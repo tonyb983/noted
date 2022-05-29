@@ -12,6 +12,7 @@ mod screens;
 mod simple_prompt;
 mod toaster;
 
+pub use list::NoteList;
 pub use msg::ToApp;
 pub use note_editor::NoteEditor;
 pub use simple_prompt::SimplePrompt;

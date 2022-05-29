@@ -7,9 +7,10 @@
 use crossbeam_channel::Sender;
 use eframe::egui::{self, TextEdit};
 use egui_commonmark::{CommonMarkCache, CommonMarkViewer};
+use egui_toast::Toast;
 use tinyid::TinyId;
 
-use crate::types::Note;
+use crate::types::{Note, Reminder};
 
 use super::{super::settings::AppSettings, ToApp, WidgetState};
 
@@ -19,20 +20,29 @@ enum PreviewState {
     Closed,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+enum ActiveReminder {
+    Text,
+    Date,
+}
+
 pub struct NoteEditor {
     active: WidgetState,
     active_note: Option<Note>,
     active_tag: Option<usize>,
+    active_reminder: Option<(usize, ActiveReminder)>,
     md_cache: CommonMarkCache,
     has_changes: bool,
     preview_state: PreviewState,
     app_sender: Sender<ToApp>,
+    toast_sender: Sender<Toast>,
     humanize_dates: bool,
 }
 
 impl NoteEditor {
     pub fn new(
         app_sender: Sender<ToApp>,
+        toast_sender: Sender<Toast>,
         note: Option<Note>,
         active: bool,
         settings: &AppSettings,
@@ -42,10 +52,12 @@ impl NoteEditor {
             active: active.into(),
             active_note: note,
             active_tag: None,
+            active_reminder: None,
             has_changes: false,
             preview_state: PreviewState::Closed,
             md_cache: CommonMarkCache::default(),
             humanize_dates: true,
+            toast_sender,
         }
     }
 
@@ -64,7 +76,7 @@ impl NoteEditor {
                 ui.allocate_ui_at_rect(max_rect.shrink2(egui::vec2(shrink_x, shrink_y)), |ui| {
                     ui.vertical_centered(|ui| {
                         if ui.button("Create Note").clicked() {
-                            self.app_sender.send(ToApp::CreateNewNote).unwrap();
+                            Self::send_app_msg(&self.app_sender, ToApp::CreateNewNote);
                         }
                         ui.label("Or select an existing note to start editing.");
                     });
@@ -74,11 +86,13 @@ impl NoteEditor {
         };
 
         changes |= self.render_title_editor(ui, &mut active_note);
-        ui.add(egui::Separator::default().horizontal().spacing(30.));
+        ui.add(egui::Separator::default().horizontal().spacing(25.));
         changes |= self.render_content_editor(ui, &mut active_note);
-        ui.add(egui::Separator::default().horizontal().spacing(30.));
+        ui.add(egui::Separator::default().horizontal().spacing(25.));
         changes |= self.render_tags_editor(ui, &mut active_note);
-        ui.add(egui::Separator::default().horizontal().spacing(30.));
+        ui.add(egui::Separator::default().horizontal().spacing(25.));
+        changes |= self.render_reminders(ui, &mut active_note);
+        ui.add(egui::Separator::default().horizontal().spacing(25.));
         self.render_metadata(ui, &mut active_note);
 
         if changes {
@@ -285,6 +299,71 @@ impl NoteEditor {
         false
     }
 
+    fn render_reminders(&mut self, ui: &mut egui::Ui, note: &mut Note) -> bool {
+        let mut reminders = note.reminders().to_vec();
+        let mut removals: Vec<usize> = Vec::new();
+        let mut reminders_changed = false;
+        ui.add(egui::Label::new(
+            egui::RichText::new("Reminders:").underline(),
+        ));
+
+        if reminders.is_empty() {
+            ui.add(egui::Label::new(
+                egui::RichText::new("No reminders set.").weak(),
+            ));
+        } else {
+            let grid_id = egui::Id::new("note_reminders_grid");
+
+            match self.active_reminder {
+                Some((idx, state)) => {
+                    egui::Grid::new(grid_id).num_columns(3).show(ui, |ui| {
+                        for (i, reminder) in reminders.iter_mut().enumerate() {
+                            ui.add(egui::Label::new(reminder.due_display()));
+                            ui.add(egui::Label::new(reminder.text()));
+                            if ui.small_button("x").clicked() {
+                                removals.push(i);
+                            }
+                            ui.end_row();
+                        }
+                    });
+                }
+                None => {
+                    egui::Grid::new(grid_id).num_columns(3).show(ui, |ui| {
+                        for (i, reminder) in reminders.iter_mut().enumerate() {
+                            ui.add(egui::Label::new(reminder.due_display()));
+                            ui.add(egui::Label::new(reminder.text()));
+                            if ui.small_button("x").clicked() {
+                                removals.push(i);
+                            }
+                            ui.end_row();
+                        }
+                    });
+                }
+            }
+        }
+
+        if ui.small_button("Create Reminder").clicked() {
+            reminders.push(Reminder::default());
+            // self.active_reminder = Some((reminders.len() - 1, ActiveReminder::Text));
+            reminders_changed = true;
+        }
+
+        if !removals.is_empty() {
+            removals.sort_unstable();
+            removals.reverse();
+            for i in removals {
+                reminders.remove(i);
+            }
+            reminders_changed = true;
+        }
+
+        if reminders_changed {
+            note.set_reminders(reminders);
+        }
+
+        reminders_changed
+    }
+
     #[allow(clippy::unused_self)]
     fn render_metadata(&mut self, ui: &mut egui::Ui, note: &mut Note) {
         ui.horizontal(|ui| {
@@ -308,5 +387,9 @@ impl NoteEditor {
                 }
             });
         });
+    }
+
+    fn send_app_msg(sender: &Sender<ToApp>, msg: ToApp) {
+        sender.send(msg).expect("Unable to send message to GuiApp");
     }
 }

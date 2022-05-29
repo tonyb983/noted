@@ -17,7 +17,7 @@ use super::{
     backend::{Backend, ToBackend, ToFrontend},
     hotkey::{HotkeyEditor, HotkeyState, Hotkeys},
     settings::{AppSettings, AppSettingsUi},
-    widgets::{NoteEditor, SimplePrompt, ToApp},
+    widgets::{NoteEditor, NoteList, SimplePrompt, ToApp},
 };
 
 fn default_toast_options() -> ToastOptions {
@@ -68,7 +68,7 @@ impl DeletingState {
 }
 
 pub struct GuiApp {
-    notes: Vec<Note>,
+    note_list: NoteList,
     state: AppState,
     settings: AppSettings,
     settings_open: bool,
@@ -78,6 +78,7 @@ pub struct GuiApp {
     exit_state: ExitState,
     note_editor: NoteEditor,
     widget_rx: Receiver<ToApp>,
+    widget_tx: Sender<ToApp>,
     toast_tx: Sender<Toast>,
     toast_rx: Receiver<Toast>,
     deleting_state: DeletingState,
@@ -90,14 +91,14 @@ impl GuiApp {
     pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
         let settings = AppSettings::load_or_create().expect("Unable to load/create app settings");
         Self::setup_custom_fonts(&cc.egui_ctx);
-        let notes = Vec::new();
 
         let (front_tx, front_rx) = crossbeam_channel::unbounded();
         let (back_tx, back_rx) = crossbeam_channel::unbounded();
         let (widget_tx, widget_rx) = crossbeam_channel::unbounded();
         let (toast_tx, toast_rx) = crossbeam_channel::unbounded();
 
-        let note_editor = NoteEditor::new(widget_tx.clone(), None, true, &settings);
+        let note_editor =
+            NoteEditor::new(widget_tx.clone(), toast_tx.clone(), None, true, &settings);
 
         let frame_clone = cc.egui_ctx.clone();
         std::thread::spawn(move || {
@@ -124,6 +125,8 @@ impl GuiApp {
             }
         }
 
+        let note_list = NoteList::new(widget_tx.clone(), toast_tx.clone(), &settings);
+
         let error_log = vec![
             "This is a test error log entry".to_string(),
             "This is another fake error message".to_string(),
@@ -131,7 +134,7 @@ impl GuiApp {
         ];
 
         Self {
-            notes,
+            note_list,
             front_tx,
             back_rx,
             state: AppState::NoDatabase,
@@ -141,12 +144,19 @@ impl GuiApp {
             exit_state: ExitState::Running,
             note_editor,
             widget_rx,
+            widget_tx,
             deleting_state: DeletingState::None,
             time: cc.egui_ctx.input().time,
             toast_rx,
             toast_tx,
             hotkeys: Hotkeys::default(),
         }
+    }
+
+    pub fn send_app_message(&self, msg: ToApp) {
+        self.widget_tx
+            .send(msg)
+            .expect("Unable to send message to widget thread");
     }
 
     fn setup_custom_fonts(ctx: &egui::Context) {
@@ -207,6 +217,10 @@ impl GuiApp {
             .expect("Unable to send timed save message to backend");
     }
 
+    fn needs_save(&self) -> bool {
+        self.note_editor.has_changes()
+    }
+
     fn new_note(&mut self) {
         self.front_tx
             .send(ToBackend::CreateNote {
@@ -221,7 +235,9 @@ impl GuiApp {
     }
 
     fn update_active_note(&mut self) {
-        if self.note_editor.has_active_note() && self.note_editor.has_changes() {
+        if
+        /*self.note_editor.has_active_note() && */
+        self.note_editor.has_changes() {
             if let Some(note) = self.note_editor.get_active_note() {
                 self.front_tx
                     .send(ToBackend::UpdateNote { note: note.clone() })
@@ -231,7 +247,7 @@ impl GuiApp {
         }
     }
 
-    fn delete_note_v2(&mut self, id: TinyId) {
+    fn delete_note(&mut self, id: TinyId) {
         self.note_editor.clear_if_active_id(id);
         self.front_tx
             .send(ToBackend::DeleteNote { id })
@@ -309,36 +325,7 @@ impl GuiApp {
                 },
             );
             ui.separator();
-            egui::ScrollArea::vertical().show(ui, |ui| {
-                let max_width = ui.available_width();
-                egui::Grid::new("note_selection_grid")
-                    .num_columns(1)
-                    .max_col_width(max_width)
-                    .min_col_width(max_width)
-                    .min_row_height(15.)
-                    .show(ui, |ui| {
-                        for (i, note) in self.notes.iter().enumerate() {
-                            let button = egui::Button::new(note.title()).wrap(true);
-                            ui.allocate_ui_with_layout(
-                                [max_width, 75.].into(),
-                                egui::Layout::top_down_justified(egui::Align::Center),
-                                |ui| {
-                                    let res = ui.add(button).context_menu(|ui| {
-                                        if ui.small_button("Delete this note.").clicked() {
-                                            self.deleting_state =
-                                                DeletingState::Prompting(note.id());
-                                            ui.close_menu();
-                                        }
-                                    });
-                                    if res.clicked() {
-                                        change_active = Some(note.clone());
-                                    }
-                                },
-                            );
-                            ui.end_row();
-                        }
-                    });
-            });
+            self.note_list.render(ui);
         });
 
         // Currently I have to do this because I can't call this function while iterating through the list of GuiApp::notes
@@ -367,7 +354,7 @@ impl GuiApp {
                 });
             }
             DeletingState::Confirmed(id) => {
-                self.delete_note_v2(id);
+                self.delete_note(id);
                 self.deleting_state = DeletingState::None;
             }
         }
@@ -429,15 +416,37 @@ impl GuiApp {
                     egui::Vec2::new(width, 30.),
                     egui::Layout::right_to_left(),
                     |ui| {
-                        ui.add_space(10.);
+                        ui.add_space(12.);
                         ui.style_mut().override_font_id = Some(egui::FontId::monospace(12.));
                         ui.style_mut().override_text_style = Some(egui::TextStyle::Monospace);
                         let label = egui::Label::new("\u{f013}").sense(egui::Sense::click());
                         if ui.add(label).clicked() {
                             self.settings_open = !self.settings_open;
                         }
+                        ui.add_space(10.);
+                        let label = egui::Label::new("ST").sense(egui::Sense::click());
+                        if ui.add(label).clicked() {
+                            self.toast_tx.send(Toast {
+                                kind: ToastKind::Warning,
+                                text: "This is a short toast.".into(),
+                                options: ToastOptions::with_duration(
+                                    std::time::Duration::from_secs(5),
+                                ),
+                            });
+                        }
+                        ui.add_space(10.);
+                        let label = egui::Label::new("LT").sense(egui::Sense::click());
+                        if ui.add(label).clicked() {
+                            self.toast_tx.send(Toast {
+                                kind: ToastKind::Error,
+                                text: "This is a much longer toast. It has much more text! It has much more text! It has much more text! It has much more text! It has much more text! It has much more text! It has much more text! It has much more text!".into(),
+                                options: ToastOptions::with_duration(
+                                    std::time::Duration::from_secs(5),
+                                ),
+                            });
+                        }
+                        let space = ui.available_width() - 35.0;
                         let log_label = egui::Label::new("Log").wrap(false);
-                        let space = ui.available_width() - 50.0;
                         ui.add_space(space);
                         ui.label("Log");
                         ui.reset_style();
@@ -496,7 +505,7 @@ impl GuiApp {
 
     fn render_toasts(&mut self, ctx: &egui::Context) {
         let mut anchor = ctx.input().screen_rect().shrink(5.0).max;
-        anchor.x *= 0.9;
+        anchor.x *= 0.95;
         let mut toasts = Toasts::new(ctx)
             .direction(egui::Direction::BottomUp)
             .anchor(anchor)
@@ -541,7 +550,7 @@ impl eframe::App for GuiApp {
         match self.back_rx.try_recv() {
             Ok(msg) => match msg {
                 ToFrontend::RefreshNoteList { notes } => {
-                    self.notes = notes;
+                    self.note_list.update_note_list(notes);
                     self.toast_tx
                         .send(Toast {
                             kind: ToastKind::Info,
@@ -572,11 +581,11 @@ impl eframe::App for GuiApp {
                 }
                 ToFrontend::DatabaseLoaded { notes } => {
                     self.state = AppState::DatabaseOpen;
-                    self.notes = notes;
+                    self.note_list.update_note_list(notes);
                 }
                 ToFrontend::DatabaseClosed => {
                     self.state = AppState::NoDatabase;
-                    self.notes = Vec::new();
+                    self.note_list.clear_note_list();
                     self.note_editor.clear_note();
                 }
             },
@@ -591,6 +600,18 @@ impl eframe::App for GuiApp {
                     ToApp::CreateNewNote => {
                         self.new_note();
                     }
+                    ToApp::SetActiveNote(note) => {
+                        self.change_active_note(Some(note));
+                    }
+                    ToApp::DeleteNote(note) => {
+                        self.deleting_state = DeletingState::Prompting(note.id());
+                    }
+                    ToApp::DeleteActiveNote => {
+                        if let Some(note) = self.note_editor.get_active_note().cloned() {
+                            self.deleting_state = DeletingState::Prompting(note.id());
+                        }
+                    }
+                    ToApp::SaveRequested => self.save_data(),
                 },
                 Err(err) => {
                     self.error_log

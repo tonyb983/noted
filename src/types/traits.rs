@@ -4,12 +4,8 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-use crate::types::Note;
+use tinyid::TinyId;
 
-pub enum ToApp {
-    CreateNewNote,
-    SetActiveNote(Note),
-    DeleteNote(Note),
-    DeleteActiveNote,
-    SaveRequested,
+pub trait HasId {
+    fn id(&self) -> TinyId;
 }

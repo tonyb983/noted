@@ -7,6 +7,7 @@
 #[derive(Clone, Debug, Default, Hash, serde::Deserialize, serde::Serialize)]
 pub struct TagList {
     data: Vec<String>,
+    #[serde(skip)]
     dirty: bool,
 }
 

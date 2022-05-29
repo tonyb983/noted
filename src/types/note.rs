@@ -11,7 +11,7 @@ use uuid::Uuid;
 
 use crate::{
     flame_guard,
-    types::{CreateNote, DeleteNote, UpdateNote},
+    types::{CreateNote, DeleteNote, HasId, Reminder, UpdateNote},
 };
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -20,6 +20,8 @@ pub struct Note {
     title: String,
     content: String,
     tags: Vec<String>,
+    #[serde(default)]
+    reminders: Vec<Reminder>,
     created: OffsetDateTime,
     updated: OffsetDateTime,
     #[serde(skip)]
@@ -29,21 +31,23 @@ pub struct Note {
 }
 
 impl Note {
+    #[tracing::instrument(level = "trace")]
     #[must_use]
     pub fn existing(
         id: TinyId,
         title: String,
         content: String,
         tags: Vec<String>,
+        reminders: Vec<Reminder>,
         created: OffsetDateTime,
         updated: OffsetDateTime,
     ) -> Self {
-        crate::profile_guard!("existing", "types::Note");
         Note {
             id,
             title,
             content,
             tags,
+            reminders,
             created,
             updated,
             dirty: false,
@@ -51,15 +55,23 @@ impl Note {
         }
     }
 
+    #[tracing::instrument(skip(dto), fields(title, content, tags, reminders))]
     #[must_use]
     pub fn create(dto: impl Into<CreateNote>) -> Self {
-        crate::profile_guard!("create", "types::Note");
-        let (title, content, tags) = dto.into().into_parts();
+        let (title, content, tags, reminders) = dto.into().into_parts();
+        #[cfg(feature = "tracing")]
+        {
+            tracing::Span::current().record("title", &title);
+            tracing::Span::current().record("content", &content);
+            tracing::Span::current().record("tags", &tags);
+            tracing::Span::current().record("reminders", &reminders);
+        }
         Self {
             id: TinyId::random(),
             title: title.unwrap_or_default(),
             content: content.unwrap_or_default(),
             tags,
+            reminders,
             created: OffsetDateTime::now_utc(),
             updated: OffsetDateTime::now_utc(),
             dirty: true,
@@ -67,15 +79,23 @@ impl Note {
         }
     }
 
+    #[tracing::instrument(skip_all, fields(title, content, tags, reminders))]
     #[must_use]
     pub fn create_for(db: &crate::db::Database, dto: impl Into<CreateNote>) -> Self {
-        crate::profile_guard!("create_for", "types::Note");
-        let (title, content, tags) = dto.into().into_parts();
+        let (title, content, tags, reminders) = dto.into().into_parts();
+        #[cfg(feature = "tracing")]
+        {
+            tracing::Span::current().record("title", &title);
+            tracing::Span::current().record("content", &content);
+            tracing::Span::current().record("tags", &tags);
+            tracing::Span::current().record("reminders", &reminders);
+        }
         Self {
             id: db.create_id(),
             title: title.unwrap_or_default(),
             content: content.unwrap_or_default(),
             tags,
+            reminders,
             created: OffsetDateTime::now_utc(),
             updated: OffsetDateTime::now_utc(),
             dirty: true,
@@ -83,9 +103,18 @@ impl Note {
         }
     }
 
+    #[tracing::instrument(skip(dto), fields(dto.id, dto.title, dto.content, dto.tags, dto.reminders))]
     pub fn update(&mut self, dto: impl Into<UpdateNote>) -> bool {
-        crate::profile_guard!("update", "types::Note");
-        let (id, title, content, tags) = dto.into().into_parts();
+        let (id, title, content, tags, reminders) = dto.into().into_parts();
+
+        #[cfg(feature = "tracing")]
+        {
+            tracing::Span::current().record("dto.id", &id);
+            tracing::Span::current().record("dto.title", &title);
+            tracing::Span::current().record("dto.content", &content);
+            tracing::Span::current().record("dto.tags", &tags);
+            tracing::Span::current().record("dto.reminders", &reminders);
+        }
 
         if id != self.id {
             return false;
@@ -109,6 +138,12 @@ impl Note {
                 self.dirty = true;
             }
         }
+        if let Some(reminders) = reminders {
+            if self.reminders != reminders {
+                self.reminders = reminders;
+                self.dirty = true;
+            }
+        }
         if self.dirty {
             self.set_updated_now();
         }
@@ -116,7 +151,6 @@ impl Note {
     }
 
     pub fn update_from(&mut self, other: &Note) {
-        crate::profile_guard!("update_from", "types::Note");
         if self.id != other.id {
             return;
         }
@@ -131,7 +165,6 @@ impl Note {
     }
 
     pub fn delete(&mut self, dto: impl Into<DeleteNote>) -> bool {
-        crate::profile_guard!("delete", "types::Note");
         let id = *dto.into().id();
         if self.id == id {
             self.dirty = true;
@@ -143,18 +176,15 @@ impl Note {
 
     #[must_use]
     pub fn id(&self) -> TinyId {
-        crate::profile_guard!("id", "types::Note");
         self.id
     }
 
     #[must_use]
     pub fn title(&self) -> &str {
-        crate::profile_guard!("title", "types::Note");
         &self.title
     }
 
     pub fn set_title(&mut self, title: &str) {
-        crate::profile_guard!("set_title", "types::Note");
         if self.title != title {
             self.title = title.to_string();
             self.set_updated_now();
@@ -163,7 +193,6 @@ impl Note {
     }
 
     pub fn update_title(&mut self, f: impl FnOnce(&str) -> String) {
-        crate::profile_guard!("update_title", "types::Note");
         let new = f(&self.title);
         if new != self.title {
             self.title = new;
@@ -174,12 +203,10 @@ impl Note {
 
     #[must_use]
     pub fn content(&self) -> &str {
-        crate::profile_guard!("content", "types::Note");
         &self.content
     }
 
     pub fn set_content(&mut self, content: &str) {
-        crate::profile_guard!("set_content", "types::Note");
         if self.content != content {
             self.content = content.to_string();
             self.set_updated_now();
@@ -188,7 +215,6 @@ impl Note {
     }
 
     pub fn update_content(&mut self, f: impl FnOnce(&str) -> String) {
-        crate::profile_guard!("update_content", "types::Note");
         let new = f(&self.content);
         if new != self.content {
             self.content = new;
@@ -198,7 +224,6 @@ impl Note {
     }
 
     pub fn append_content(&mut self, content: &str) {
-        crate::profile_guard!("append_content", "types::Note");
         if !content.is_empty() {
             if !self.content().ends_with(' ') && !content.starts_with(' ') {
                 self.content.push(' ');
@@ -210,13 +235,45 @@ impl Note {
     }
 
     #[must_use]
+    pub fn reminders(&self) -> &[Reminder] {
+        &self.reminders
+    }
+
+    pub fn set_reminders(&mut self, reminders: Vec<Reminder>) {
+        if self.reminders != reminders {
+            self.reminders = reminders;
+            self.set_updated_now();
+            self.dirty = true;
+        }
+    }
+
+    pub fn update_reminders(&mut self, f: impl FnOnce(&[Reminder]) -> Vec<Reminder>) {
+        let new = f(&self.reminders);
+        self.set_reminders(new);
+    }
+
+    pub fn add_reminder(&mut self, reminder: Reminder) {
+        if !self.reminders.contains(&reminder) {
+            self.reminders.push(reminder);
+            self.set_updated_now();
+            self.dirty = true;
+        }
+    }
+
+    pub fn remove_reminder(&mut self, reminder: &Reminder) {
+        if let Some(index) = self.reminders.iter().position(|r| r.id() == reminder.id()) {
+            self.reminders.remove(index);
+            self.set_updated_now();
+            self.dirty = true;
+        }
+    }
+
+    #[must_use]
     pub fn tags(&self) -> &[String] {
-        crate::profile_guard!("tags", "types::Note");
         &self.tags
     }
 
     pub fn set_tags(&mut self, mut tags: Vec<String>) {
-        crate::profile_guard!("set_tags", "types::Note");
         // tags.sort_unstable();
         // tags.dedup();
         if self.tags != tags {
@@ -227,13 +284,11 @@ impl Note {
     }
 
     pub fn update_tags(&mut self, f: impl FnOnce(&[String]) -> Vec<String>) {
-        crate::profile_guard!("update_tags", "types::Note");
         let new = f(&self.tags);
         self.set_tags(new);
     }
 
     pub fn add_tag(&mut self, tag: String) {
-        crate::profile_guard!("add_tag", "types::Note");
         if !self.tags.contains(&tag) {
             self.tags.push(tag);
             self.set_updated_now();
@@ -242,7 +297,6 @@ impl Note {
     }
 
     pub fn remove_tag(&mut self, tag: &str) {
-        crate::profile_guard!("remove_tag", "types::Note");
         if let Some(index) = self.tags.iter().position(|t| t == tag) {
             self.tags.remove(index);
             self.set_updated_now();
@@ -252,106 +306,88 @@ impl Note {
 
     #[must_use]
     pub fn tag_len(&self) -> usize {
-        crate::profile_guard!("tag_len", "types::Note");
         self.tags.len()
     }
 
     #[must_use]
     pub fn created(&self) -> &OffsetDateTime {
-        crate::profile_guard!("created", "types::Note");
         &self.created
     }
 
     #[must_use]
     pub fn created_humanized(&self) -> impl std::fmt::Display {
-        crate::profile_guard!("created_humanized", "types::Note");
         crate::util::dtf::humanize_timespan_to_now(self.created)
     }
 
     #[must_use]
     pub fn updated(&self) -> &OffsetDateTime {
-        crate::profile_guard!("updated", "types::Note");
         &self.updated
     }
 
     #[must_use]
     pub fn updated_humanized(&self) -> impl std::fmt::Display {
-        crate::profile_guard!("updated_humanized", "types::Note");
         crate::util::dtf::humanize_timespan_to_now(self.updated)
     }
 
     #[must_use]
     pub fn dirty(&self) -> bool {
-        crate::profile_guard!("dirty", "types::Note");
         self.dirty
     }
 
     pub fn set_dirty(&mut self, dirty: bool) {
-        crate::profile_guard!("set_dirty", "types::Note");
         self.dirty = dirty;
     }
 
     #[must_use]
     pub fn pending_delete(&self) -> bool {
-        crate::profile_guard!("pending_delete", "types::Note");
         self.pending_delete
     }
 
     pub fn set_pending_delete(&mut self, pending_delete: bool) {
-        crate::profile_guard!("set_pending_delete", "types::Note");
         self.pending_delete = pending_delete;
     }
 
     #[must_use]
     pub fn title_contains(&self, text: &str) -> bool {
-        crate::profile_guard!("title_contains", "types::Note");
         self.title.contains(text)
     }
 
     #[must_use]
     pub fn title_matches(&self, text: &str) -> bool {
-        crate::profile_guard!("title_matches", "types::Note");
         self.title == text
     }
 
     #[must_use]
     pub fn content_contains(&self, text: &str) -> bool {
-        crate::profile_guard!("content_contains", "types::Note");
         self.content.contains(text)
     }
 
     #[must_use]
     pub fn content_matches(&self, text: &str) -> bool {
-        crate::profile_guard!("content_matches", "types::Note");
         self.content == text
     }
 
     #[must_use]
     pub fn tag_contains(&self, text: &str) -> bool {
-        crate::profile_guard!("tag_contains", "types::Note");
         self.tags.iter().any(|tag| tag.contains(text))
     }
 
     #[must_use]
     pub fn tag_matches(&self, text: &str) -> bool {
-        crate::profile_guard!("tag_matches", "types::Note");
         self.tags.iter().any(|tag| tag == text)
     }
 
     #[must_use]
     pub fn full_text_search(&self, text: &str) -> bool {
-        crate::profile_guard!("full_text_search", "types::Note");
         self.title_contains(text) || self.content_contains(text) || self.tag_contains(text)
     }
 
     pub(crate) fn clear_flags(&mut self) {
-        crate::profile_guard!("clear_flags", "types::Note");
         self.dirty = false;
         self.pending_delete = false;
     }
 
     pub(crate) fn make_invalid(&mut self) {
-        crate::profile_guard!("make_invalid", "types::Note");
         self.id = TinyId::null();
         self.dirty = false;
         self.pending_delete = false;
@@ -363,13 +399,11 @@ impl Note {
     }
 
     pub fn touch(&mut self) {
-        crate::profile_guard!("touch", "types::Note");
         self.set_updated_now();
         self.set_dirty(true);
     }
 
     fn set_updated_now(&mut self) {
-        crate::profile_guard!("set_updated_now", "types::Note");
         self.updated = OffsetDateTime::now_utc();
     }
 }
@@ -390,6 +424,12 @@ impl std::fmt::Display for Note {
 impl PartialEq<Note> for Note {
     fn eq(&self, other: &Note) -> bool {
         self.id == other.id
+    }
+}
+
+impl HasId for Note {
+    fn id(&self) -> TinyId {
+        self.id
     }
 }
 

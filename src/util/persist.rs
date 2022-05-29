@@ -62,11 +62,12 @@ impl Persistence {
     /// - `Error::Io` - If any i/o errors occur
     /// - `Error::Json` or `Error::SerDe` - If the (de)serialization process fails
     /// - `Error::NotImplemented` - If the requested method is not (yet) implemented
+    #[tracing::instrument(skip(bytes))]
     pub fn load_from_bytes_default<T>(bytes: &[u8]) -> crate::Result<T>
     where
         T: serde::de::DeserializeOwned,
     {
-        crate::profile_guard!("load_from_bytes_default", "util::Persistence");
+        // crate::profile_guard!("load_from_bytes_default", "util::Persistence");
         Self::load_from_bytes(bytes, Self::DEFAULT_METHOD)
     }
 
@@ -77,11 +78,12 @@ impl Persistence {
     /// - `Error::Io` - If any i/o errors occur
     /// - `Error::Json` or `Error::SerDe` - If the (de)serialization process fails
     /// - `Error::NotImplemented` - If the requested method is not (yet) implemented
+    #[tracing::instrument(skip(bytes))]
     pub fn load_from_bytes<T>(bytes: &[u8], method: Method) -> crate::Result<T>
     where
         T: serde::de::DeserializeOwned,
     {
-        crate::profile_guard!("load_from_bytes", "util::Persistence");
+        // crate::profile_guard!("load_from_bytes", "util::Persistence");
         match method {
             Method::Json => {
                 let output: T = serde_json::from_slice(bytes)?;
@@ -115,11 +117,12 @@ impl Persistence {
     /// - `Error::Io` - If any i/o errors occur
     /// - `Error::Json` or `Error::SerDe` - If the (de)serialization process fails
     /// - `Error::NotImplemented` - If the requested method is not (yet) implemented
+    #[tracing::instrument(skip(data))]
     pub fn save_to_bytes<T>(data: &T, method: Method) -> crate::Result<Vec<u8>>
     where
         T: serde::Serialize,
     {
-        crate::profile_guard!("save_to_bytes", "util::Persistence");
+        // crate::profile_guard!("save_to_bytes", "util::Persistence");
         let mut bytes = Vec::with_capacity(2048);
         match method {
             Method::Json => {
@@ -154,6 +157,7 @@ impl Persistence {
     /// - `Error::Io` - If any i/o errors occur
     /// - `Error::Json` or `Error::SerDe` - If the (de)serialization process fails
     /// - `Error::NotImplemented` - If the requested method is not (yet) implemented
+    #[tracing::instrument(skip(data))]
     pub fn save_to_bytes_default<T>(data: &T) -> crate::Result<Vec<u8>>
     where
         T: serde::Serialize,
@@ -168,13 +172,14 @@ impl Persistence {
     /// - `Error::Io` - If any i/o errors occur
     /// - `Error::Json` or `Error::SerDe` - If the (de)serialization process fails
     /// - `Error::NotImplemented` - If the requested method is not (yet) implemented
+    #[tracing::instrument(fields(path = path.as_ref().display().to_string().as_str()))]
     pub fn load_from_file<T>(path: impl AsRef<Path>, method: Method) -> crate::Result<T>
     where
         T: serde::de::DeserializeOwned,
     {
         use std::fs::File;
         use std::io::Read;
-        crate::profile_guard!("load_from_file", "util::Persistence");
+        // crate::profile_guard!("load_from_file", "util::Persistence");
         let path = path.as_ref();
 
         if !path.exists() {
@@ -219,11 +224,12 @@ impl Persistence {
     /// - `Error::Io` - If any i/o errors occur
     /// - `Error::Json` or `Error::SerDe` - If the (de)serialization process fails
     /// - `Error::NotImplemented` - If the requested method is not (yet) implemented
+    #[tracing::instrument(fields(path = path.as_ref().display().to_string().as_str()))]
     pub fn load_from_file_default<T>(path: impl AsRef<Path>) -> crate::Result<T>
     where
         T: serde::de::DeserializeOwned,
     {
-        crate::profile_guard!("load_from_file_default", "util::Persistence");
+        // crate::profile_guard!("load_from_file_default", "util::Persistence");
         Self::load_from_file(path, Self::DEFAULT_METHOD)
     }
 
@@ -236,6 +242,7 @@ impl Persistence {
     /// - `Error::Io` - If any i/o errors occur
     /// - `Error::Json` or `Error::SerDe` - If the (de)serialization process fails
     /// - `Error::NotImplemented` - If the requested method is not (yet) implemented
+    #[tracing::instrument(skip(data), fields(path = path.as_ref().display().to_string().as_str()))]
     pub fn save_to_file<T>(data: &T, path: impl AsRef<Path>, method: Method) -> crate::Result
     where
         T: serde::Serialize,
@@ -243,7 +250,7 @@ impl Persistence {
         use std::fs::File;
         use std::io::Write;
 
-        crate::profile_guard!("save_to_file", "util::Persistence");
+        // crate::profile_guard!("save_to_file", "util::Persistence");
 
         let path = path.as_ref();
         let mut file = File::create(path)?;
@@ -281,11 +288,12 @@ impl Persistence {
     /// - `Error::Io` - If any i/o errors occur
     /// - `Error::Json` or `Error::SerDe` - If the (de)serialization process fails
     /// - `Error::NotImplemented` - If the requested method is not (yet) implemented
+    #[tracing::instrument(skip(data), fields(path = path.as_ref().display().to_string().as_str()))]
     pub fn save_to_new_file<T>(data: &T, path: impl AsRef<Path>, method: Method) -> crate::Result
     where
         T: serde::Serialize,
     {
-        crate::profile_guard!("save_to_new_file", "util::Persistence");
+        // crate::profile_guard!("save_to_new_file", "util::Persistence");
         if path.as_ref().exists() {
             return Err(
                 std::io::Error::new(std::io::ErrorKind::Other, "file already exists").into(),
@@ -302,11 +310,12 @@ impl Persistence {
     /// - `Error::Io` - If any i/o errors occur
     /// - `Error::Json` or `Error::SerDe` - If the (de)serialization process fails
     /// - `Error::NotImplemented` - If the requested method is not (yet) implemented
+    #[tracing::instrument(skip(data), fields(path = path.as_ref().display().to_string().as_str()))]
     pub fn save_to_file_default<T>(data: &T, path: impl AsRef<Path>) -> crate::Result
     where
         T: serde::Serialize,
     {
-        crate::profile_guard!("save_to_file_default", "util::Persistence");
+        // crate::profile_guard!("save_to_file_default", "util::Persistence");
         Self::save_to_file(data, path, Self::DEFAULT_METHOD)
     }
 
@@ -320,11 +329,12 @@ impl Persistence {
     /// - `Error::Io` - If any i/o errors occur
     /// - `Error::Json` or `Error::SerDe` - If the (de)serialization process fails
     /// - `Error::NotImplemented` - If the requested method is not (yet) implemented
+    #[tracing::instrument(fields(path = path.as_ref().display().to_string().as_str()))]
     pub fn convert_file<T>(path: impl AsRef<Path>, from: Method, to: Method) -> crate::Result
     where
         T: serde::Serialize + serde::de::DeserializeOwned,
     {
-        crate::profile_guard!("convert_file", "util::Persistence");
+        // crate::profile_guard!("convert_file", "util::Persistence");
         let path = path.as_ref();
         let backup = format!("{}.bak", path.display());
         std::fs::copy(path, backup)?;
@@ -343,11 +353,12 @@ impl Persistence {
     /// - `Error::Io` - If any i/o errors occur
     /// - `Error::Json` or `Error::SerDe` - If the (de)serialization process fails
     /// - `Error::NotImplemented` - If the requested method is not (yet) implemented
+    #[tracing::instrument(skip(bytes))]
     pub fn convert_bytes<T>(bytes: &[u8], from: Method, to: Method) -> crate::Result<Vec<u8>>
     where
         T: serde::Serialize + serde::de::DeserializeOwned,
     {
-        crate::profile_guard!("convert_bytes", "util::Persistence");
+        // crate::profile_guard!("convert_bytes", "util::Persistence");
         let data: T = Self::load_from_bytes(bytes, from)?;
         Self::save_to_bytes(&data, to)
     }

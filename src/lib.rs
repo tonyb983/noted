@@ -5,6 +5,7 @@
     box_patterns,
     box_syntax,
     inline_const,
+    const_convert,
     // inline_const_pat,
     const_trait_impl,
     control_flow_enum,
@@ -21,11 +22,13 @@
     let_else,
     lint_reasons,
     io_error_other,
+    mixed_integer_ops,
     no_coverage,
     once_cell,
     pattern,
     proc_macro_hygiene,
     round_char_boundary,
+    stmt_expr_attributes,
     test,
     try_blocks
 )]
@@ -33,16 +36,17 @@
 #![warn(
     clippy::pedantic,
     clippy::all,
-    // this is adding too many weird false positives unfortunately
-    // clippy::allow_attributes_without_reason,
-    // missing_docs,
     nonstandard_style,
     rust_2018_idioms,
     rust_2018_compatibility,
     rust_2021_compatibility,
+    // This is working but I prefer to use `cargo-udeps` or `cargo-machete`
+    // unused_crate_dependencies,
+    // missing_docs,
     // rustdoc::all
+    // this is adding too many warnings to out-of-crate code unfortunately
+    // clippy::allow_attributes_without_reason,
 )]
-#![warn(unused_crate_dependencies)]
 #![allow(
     // This is a library so there's going to be a lot of unused
     unused,
@@ -58,21 +62,6 @@
     clippy::wildcard_imports,
     reason = "these lints are annoying and somewhat pointless"
 )]
-
-//! ## Profiling Attributes
-//!
-//! Ignore for coverage if `no_coverage` feature is not globally enabled:
-//!   `#[cfg_attr(coverage, feature(no_coverage))]`
-//! Otherwise:
-//!   `#[no_coverage]`
-//!
-//! Flamegraph function (or any other item, modules, etc.) if feature-gated:
-//!   `#[cfg_attr(feature = "flame", flame)]`
-//! Otherwise:
-//!   `#[flame]`
-//!
-//! Only run block of code when flamegraphing:
-//!  `#[cfg(feature = "flame")]`
 
 pub mod db;
 mod macros;
@@ -94,5 +83,7 @@ pub use util::persist::{Method, Persistence};
 pub const fn type_name_of<T>(_: &T) -> &'static str {
     std::any::type_name::<T>()
 }
+
+const TRACE_FEATURE: &str = "trace";
 
 shadow_rs::shadow!(build_info);

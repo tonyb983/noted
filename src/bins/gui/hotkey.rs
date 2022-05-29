@@ -6,14 +6,34 @@ use eframe::{
     epaint::FontId,
     App,
 };
-use egui_hotkey::{BindVariant, Binding, Hotkey};
-use std::{hash::Hash, sync::Arc};
+use egui_hotkey::{BindVariant, Binding, Hotkey, HotkeyBinding};
+use std::{
+    hash::Hash,
+    ops::{Deref, DerefMut},
+    sync::Arc,
+};
+
+use super::{app::GuiApp, widgets::ToApp};
 
 mod detail {
     use super::*;
+
+    #[derive(Clone, Copy, Debug)]
     pub enum BetterBindVariant {
         Mouse(PointerButton),
         Key(Key),
+    }
+
+    impl From<PointerButton> for BetterBindVariant {
+        fn from(b: PointerButton) -> Self {
+            BetterBindVariant::Mouse(b)
+        }
+    }
+
+    impl From<Key> for BetterBindVariant {
+        fn from(b: Key) -> Self {
+            BetterBindVariant::Key(b)
+        }
     }
 
     impl PartialEq<BetterBindVariant> for BetterBindVariant {
@@ -50,7 +70,16 @@ mod detail {
         }
     }
 
-    #[derive(PartialEq, Eq, Hash)]
+    impl From<BetterBindVariant> for BindVariant {
+        fn from(bv: BetterBindVariant) -> Self {
+            match bv {
+                BetterBindVariant::Mouse(mb) => BindVariant::Mouse(mb),
+                BetterBindVariant::Key(k) => BindVariant::Keyboard(k),
+            }
+        }
+    }
+
+    #[derive(PartialEq, Eq, Hash, Clone, Copy, Debug)]
     #[allow(clippy::struct_excessive_bools)]
     pub struct BetterModifiers {
         pub alt: bool,
@@ -71,20 +100,155 @@ mod detail {
             }
         }
     }
+
+    impl From<BetterModifiers> for Modifiers {
+        fn from(m: BetterModifiers) -> Self {
+            Modifiers {
+                alt: m.alt,
+                ctrl: m.ctrl,
+                shift: m.shift,
+                mac_cmd: m.mac_cmd,
+                command: m.command,
+            }
+        }
+    }
 }
 
-#[derive(PartialEq, Eq, Hash)]
-struct EqBinding {
-    var: detail::BetterBindVariant,
-    modifiers: detail::BetterModifiers,
+use detail::{BetterBindVariant, BetterModifiers};
+
+#[derive(PartialEq, Eq, Hash, Debug, Clone, Copy)]
+pub struct BetterBinding {
+    variant: BetterBindVariant,
+    modifiers: BetterModifiers,
 }
 
-impl From<Binding> for EqBinding {
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct MaybeBinding(Option<BetterBinding>);
+
+impl Deref for MaybeBinding {
+    type Target = Option<BetterBinding>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl DerefMut for MaybeBinding {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
+impl BetterBinding {
+    pub fn new(bv: impl Into<BetterBindVariant>, m: impl Into<BetterModifiers>) -> Self {
+        BetterBinding {
+            variant: bv.into(),
+            modifiers: m.into(),
+        }
+    }
+
+    pub fn to_binding(self) -> Binding {
+        Binding {
+            variant: self.variant.into(),
+            modifiers: self.modifiers.into(),
+        }
+    }
+
+    pub fn with_ctrl(input: impl Into<BetterBindVariant>) -> Self {
+        BetterBinding::new(
+            input,
+            BetterModifiers {
+                alt: false,
+                ctrl: true,
+                shift: false,
+                mac_cmd: false,
+                command: false,
+            },
+        )
+    }
+
+    pub fn with_alt(input: impl Into<BetterBindVariant>) -> Self {
+        BetterBinding::new(
+            input,
+            BetterModifiers {
+                alt: true,
+                ctrl: false,
+                shift: false,
+                mac_cmd: false,
+                command: false,
+            },
+        )
+    }
+
+    pub fn with_ctrl_alt(input: impl Into<BetterBindVariant>) -> Self {
+        BetterBinding::new(
+            input,
+            BetterModifiers {
+                alt: true,
+                ctrl: true,
+                shift: false,
+                mac_cmd: false,
+                command: false,
+            },
+        )
+    }
+}
+
+impl From<BetterBinding> for MaybeBinding {
+    fn from(b: BetterBinding) -> Self {
+        MaybeBinding(Some(b))
+    }
+}
+
+impl From<Option<Binding>> for MaybeBinding {
+    fn from(b: Option<Binding>) -> Self {
+        match b {
+            None => MaybeBinding(None),
+            Some(b) => MaybeBinding(Some(b.into())),
+        }
+    }
+}
+
+impl HotkeyBinding for MaybeBinding {
+    const ACCEPT_MOUSE: bool = true;
+
+    const ACCEPT_KEYBOARD: bool = true;
+
+    fn new(variant: BindVariant, modifiers: Modifiers) -> Self {
+        Self(Some(BetterBinding::new(variant, modifiers)))
+    }
+
+    fn get(&self) -> Option<Binding> {
+        self.map(BetterBinding::to_binding)
+    }
+
+    fn set(&mut self, variant: BindVariant, modifiers: Modifiers) {
+        *self = Self(Some(BetterBinding::new(variant, modifiers)));
+    }
+
+    fn clear(&mut self) {
+        *self = Self(None);
+    }
+}
+
+impl From<Binding> for BetterBinding {
     fn from(binding: Binding) -> Self {
         Self {
-            var: binding.variant.into(),
+            variant: binding.variant.into(),
             modifiers: binding.modifiers.into(),
         }
+    }
+}
+
+impl From<BetterBinding> for Binding {
+    fn from(binding: BetterBinding) -> Self {
+        binding.to_binding()
+    }
+}
+
+impl From<&BetterBinding> for Binding {
+    fn from(binding: &BetterBinding) -> Self {
+        binding.to_binding()
     }
 }
 
@@ -223,7 +387,7 @@ impl Default for Hotkeys {
 impl Hotkeys {
     pub fn validate_hotkeys(&mut self) {
         let mut is_valid = true;
-        let mut bindings = std::collections::HashSet::<EqBinding>::new();
+        let mut bindings = std::collections::HashSet::<BetterBinding>::new();
         if let Some(cne) = self.close_note_editor {
             if !bindings.insert(cne.into()) {
                 is_valid = false;
@@ -381,15 +545,6 @@ impl HotkeyEditor {
             });
         });
 
-        // let mut LABEL_SIZE: f32 = 14.0;
-        // ui.add(
-        //     Slider::new(&mut LABEL_SIZE, 1f32..=30f32)
-        //         .show_value(true)
-        //         .orientation(SliderOrientation::Horizontal)
-        //         .step_by(1.0)
-        //         .text("Label Size"),
-        // );
-
         ui.indent(id.with("body"), |ui| {
             Grid::new(id.with("body_grid"))
                 .num_columns(2)
@@ -443,4 +598,44 @@ impl HotkeyEditor {
                 });
         });
     }
+}
+
+pub type HotkeyAction<'app> = Box<dyn Fn(&mut GuiApp) + 'app>;
+
+use std::collections::HashMap;
+
+#[derive(Default)]
+pub struct HotkeyMap<'app>(HashMap<BetterBinding, HotkeyAction<'app>>);
+
+impl<'app> HotkeyMap<'app> {
+    pub fn standard_hotkeys() -> Self {
+        let mut map = HashMap::new();
+
+        map.insert(
+            BetterBinding::with_ctrl(Key::S),
+            box default_save_action as _,
+        );
+        map.insert(
+            BetterBinding::with_ctrl(Key::D),
+            box default_delete_action as _,
+        );
+        map.insert(
+            BetterBinding::with_ctrl(Key::N),
+            box default_new_note_action as _,
+        );
+
+        Self(map)
+    }
+}
+
+fn default_save_action(app: &mut GuiApp) {
+    app.send_app_message(ToApp::SaveRequested);
+}
+
+fn default_delete_action(app: &mut GuiApp) {
+    app.send_app_message(ToApp::DeleteActiveNote);
+}
+
+fn default_new_note_action(app: &mut GuiApp) {
+    app.send_app_message(ToApp::CreateNewNote);
 }

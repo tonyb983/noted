@@ -13,3 +13,4 @@ pub mod profiling;
 pub mod scoped;
 pub mod validation;
 pub mod variadic;
+pub mod wrapping;

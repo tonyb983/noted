@@ -193,7 +193,7 @@ fn create_interactive_arg() -> clap::Arg<'static> {
 fn create_verbosity_arg() -> clap::Arg<'static> {
     crate::flame_guard!("bins", "cli", "app", "create_verbosity_arg");
     clap::Arg::new("verbose")
-        .long_help("How verbose the output should be. Can be used multiple times to increase verbosit, i.e. '-v -v' or '-vvv'.")
+        .long_help("How verbose the output should be. Can be used multiple times to increase verbosity, i.e. '-v -v' or '-vvv'.")
         .help("Run the command in verbose mode.")
         .long("verbose")
         .short('v')
