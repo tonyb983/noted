@@ -1,6 +1,7 @@
 /.vscode
 /coverage
 /flames
+/logs
 /target
 /Cargo.lock
 /.env
