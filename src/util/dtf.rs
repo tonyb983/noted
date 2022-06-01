@@ -154,6 +154,117 @@ pub fn short_datetime(timestamp: &OffsetDateTime) -> String {
         .expect("Unable to format timestamp")
 }
 
+#[tracing::instrument]
+#[must_use]
+pub fn short_date_and_time(timestamp: &OffsetDateTime) -> (String, String) {
+    short_datetime(timestamp)
+        .split_once(' ')
+        .map(|(s1, s2)| (s1.to_string(), s2.to_string()))
+        .expect("no space found in short_datetime!")
+}
+
+pub enum TimeLib {
+    Time,
+    Chrono,
+    Std,
+}
+
+/// ## Panics
+/// - Should not panic as we ensure that the number is in range before unwrapping.
+#[must_use]
+pub fn u8_to_tmonth(n: u8) -> time::Month {
+    if n > 23 {
+        time::Month::try_from(n % 24).unwrap()
+    } else {
+        time::Month::try_from(n).unwrap()
+    }
+}
+
+#[must_use]
+pub fn cmonth_to_tmonth(month: chrono::Month) -> time::Month {
+    match month {
+        chrono::Month::January => time::Month::January,
+        chrono::Month::February => time::Month::February,
+        chrono::Month::March => time::Month::March,
+        chrono::Month::April => time::Month::April,
+        chrono::Month::May => time::Month::May,
+        chrono::Month::June => time::Month::June,
+        chrono::Month::July => time::Month::July,
+        chrono::Month::August => time::Month::August,
+        chrono::Month::September => time::Month::September,
+        chrono::Month::October => time::Month::October,
+        chrono::Month::November => time::Month::November,
+        chrono::Month::December => time::Month::December,
+    }
+}
+
+#[must_use]
+pub fn tmonth_to_cmonth(month: time::Month) -> chrono::Month {
+    match month {
+        time::Month::January => chrono::Month::January,
+        time::Month::February => chrono::Month::February,
+        time::Month::March => chrono::Month::March,
+        time::Month::April => chrono::Month::April,
+        time::Month::May => chrono::Month::May,
+        time::Month::June => chrono::Month::June,
+        time::Month::July => chrono::Month::July,
+        time::Month::August => chrono::Month::August,
+        time::Month::September => chrono::Month::September,
+        time::Month::October => chrono::Month::October,
+        time::Month::November => chrono::Month::November,
+        time::Month::December => chrono::Month::December,
+    }
+}
+
+#[must_use]
+pub fn cweekday_to_tweekday(weekday: chrono::Weekday) -> time::Weekday {
+    match weekday {
+        chrono::Weekday::Mon => time::Weekday::Monday,
+        chrono::Weekday::Tue => time::Weekday::Tuesday,
+        chrono::Weekday::Wed => time::Weekday::Wednesday,
+        chrono::Weekday::Thu => time::Weekday::Thursday,
+        chrono::Weekday::Fri => time::Weekday::Friday,
+        chrono::Weekday::Sat => time::Weekday::Saturday,
+        chrono::Weekday::Sun => time::Weekday::Sunday,
+    }
+}
+
+#[must_use]
+pub fn tweekday_to_cweekday(weekday: time::Weekday) -> chrono::Weekday {
+    match weekday {
+        time::Weekday::Monday => chrono::Weekday::Mon,
+        time::Weekday::Tuesday => chrono::Weekday::Tue,
+        time::Weekday::Wednesday => chrono::Weekday::Wed,
+        time::Weekday::Thursday => chrono::Weekday::Thu,
+        time::Weekday::Friday => chrono::Weekday::Fri,
+        time::Weekday::Saturday => chrono::Weekday::Sat,
+        time::Weekday::Sunday => chrono::Weekday::Sun,
+    }
+}
+
+pub fn ensure_time_is_utc(dt: &mut time::OffsetDateTime) {
+    if !dt.offset().is_utc() {
+        *dt = dt.to_offset(time::UtcOffset::UTC);
+    }
+}
+
+#[must_use]
+fn time_to_chrono_dt(dt: time::OffsetDateTime) -> chrono::DateTime<chrono::Utc> {
+    let (year, month, day) = dt.date().to_calendar_date();
+    let (hour, min, sec, nano) = dt.time().as_hms_nano();
+    chrono::DateTime::<chrono::Utc>::from_utc(
+        chrono::NaiveDateTime::new(
+            chrono::NaiveDate::from_ymd(
+                year,
+                tmonth_to_cmonth(month).number_from_month(),
+                day.into(),
+            ),
+            chrono::NaiveTime::from_hms_nano(hour.into(), min.into(), sec.into(), nano),
+        ),
+        chrono::Utc,
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

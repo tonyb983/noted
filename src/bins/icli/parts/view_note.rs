@@ -47,7 +47,7 @@ Created: {} | Updated: {}"#,
 
     println!("{}", formatted);
 
-    db.ensure_sync_v2(&mut note);
+    db.ensure_sync(&mut note);
 
     Ok(())
 }

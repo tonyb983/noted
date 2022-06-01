@@ -1,0 +1,73 @@
+This is a test error log entry
+This is another fake error message
+And here's a third, lets make this one really long. Like super super super super super supser upser upserup super super supser upser upser super duper long.
+DEBUG: Hour Response: Response {
+    layer_id: LayerId {
+        order: Background,
+        id: 0000000000000001,
+    },
+    id: 0B8B78D76A5EEA8B,
+    rect: [[260.2 264.0] - [302.4 282.0]],
+    sense: Sense {
+        click: true,
+        drag: false,
+        focusable: true,
+    },
+    enabled: true,
+    hovered: true,
+    clicked: [
+        false,
+        false,
+        false,
+    ],
+    double_clicked: [
+        false,
+        false,
+        false,
+    ],
+    triple_clicked: [
+        false,
+        false,
+        false,
+    ],
+    dragged: false,
+    drag_released: false,
+    is_pointer_button_down_on: false,
+    interact_pointer_pos: None,
+    changed: false,
+}
+DEBUG: Minute Response: Response {
+    layer_id: LayerId {
+        order: Background,
+        id: 0000000000000001,
+    },
+    id: B8E800CAA26D2E5A,
+    rect: [[310.4 264.0] - [352.5 282.0]],
+    sense: Sense {
+        click: true,
+        drag: false,
+        focusable: true,
+    },
+    enabled: true,
+    hovered: false,
+    clicked: [
+        false,
+        false,
+        false,
+    ],
+    double_clicked: [
+        false,
+        false,
+        false,
+    ],
+    triple_clicked: [
+        false,
+        false,
+        false,
+    ],
+    dragged: false,
+    drag_released: false,
+    is_pointer_button_down_on: false,
+    interact_pointer_pos: None,
+    changed: false,
+}

@@ -254,16 +254,23 @@ mod tests {
     #[test]
     #[no_coverage]
     fn add() {
-        type Tester = WrappedI8<0, 10>;
+        type Tester = WrappedI8<0, 9>;
         let tester = Tester::new(0);
         assert_eq!(tester.value(), 0);
         let tester = Tester::new(10);
-        assert_eq!(tester.value(), 10);
-        let tester = Tester::new(11);
         assert_eq!(tester.value(), 0);
-        let tester = Tester::new(22);
+        let tester = Tester::new(11);
         assert_eq!(tester.value(), 1);
-        let tester = Tester::new(33);
-        assert_eq!(tester.value(), 2);
+        let tester = Tester::new(23);
+        assert_eq!(tester.value(), 3);
+        let tester = Tester::new(35);
+        assert_eq!(tester.value(), 5);
+
+        let result = tester + 10i8;
+        assert_eq!(result.value(), 5);
+        let result = tester - 9i8;
+        assert_eq!(result.value(), 6);
+        let result = tester + Tester::new(2);
+        assert_eq!(result.value(), 7);
     }
 }

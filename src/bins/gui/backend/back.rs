@@ -133,7 +133,7 @@ impl Backend {
 
     fn update_note(&mut self, note: &mut crate::types::Note) {
         if let Some(db) = &mut self.db {
-            db.ensure_sync_v2(note);
+            db.ensure_sync(note);
             let msg = ToFrontend::RefreshNoteList {
                 notes: db.get_all().to_vec(),
             };

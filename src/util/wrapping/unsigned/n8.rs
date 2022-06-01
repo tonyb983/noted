@@ -6,7 +6,9 @@
 
 use super::super::{StandardOps, WrappedNumber};
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Deserialize, serde::Serialize,
+)]
 pub struct WrappedU8<const MIN: u8 = { u8::MIN }, const MAX: u8 = { u8::MAX }>(u8);
 
 impl<const MINIMUM: u8, const MAXIMUM: u8> WrappedU8<MINIMUM, MAXIMUM> {
@@ -325,16 +327,23 @@ mod tests {
     #[test]
     #[no_coverage]
     fn add() {
-        type Tester = WrappedU8<0, 10>;
+        type Tester = WrappedU8<0, 9>;
         let tester = Tester::new(0);
         assert_eq!(tester.value(), 0);
         let tester = Tester::new(10);
-        assert_eq!(tester.value(), 10);
-        let tester = Tester::new(11);
         assert_eq!(tester.value(), 0);
-        let tester = Tester::new(22);
+        let tester = Tester::new(11);
         assert_eq!(tester.value(), 1);
-        let tester = Tester::new(33);
+        let tester = Tester::new(22);
         assert_eq!(tester.value(), 2);
+        let tester = Tester::new(33);
+        assert_eq!(tester.value(), 3);
+
+        let result = tester + 10u8;
+        assert_eq!(result.value(), 3);
+        let result = tester - 9u8;
+        assert_eq!(result.value(), 4);
+        let result = tester + Tester::new(2);
+        assert_eq!(result.value(), 5);
     }
 }

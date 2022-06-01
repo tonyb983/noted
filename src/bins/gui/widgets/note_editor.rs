@@ -4,13 +4,24 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
+use std::sync::Once;
+
+use chrono::Datelike;
 use crossbeam_channel::Sender;
-use eframe::egui::{self, TextEdit};
+use eframe::egui::{self, TextEdit, Ui};
 use egui_commonmark::{CommonMarkCache, CommonMarkViewer};
-use egui_toast::Toast;
+use egui_extras::DatePickerButton;
+use egui_toast::{Toast, ToastKind};
+use time::OffsetDateTime;
 use tinyid::TinyId;
 
-use crate::types::{Note, Reminder};
+use crate::{
+    bins::gui::app,
+    types::{
+        time::{Hour, Hour12, Minute, TimePeriod},
+        Note, Reminder,
+    },
+};
 
 use super::{super::settings::AppSettings, ToApp, WidgetState};
 
@@ -21,22 +32,24 @@ enum PreviewState {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-enum ActiveReminder {
-    Text,
+enum ReminderFocus {
     Date,
+    Time,
+    Text,
 }
 
 pub struct NoteEditor {
     active: WidgetState,
     active_note: Option<Note>,
     active_tag: Option<usize>,
-    active_reminder: Option<(usize, ActiveReminder)>,
+    active_reminder: Option<(usize, ReminderFocus)>,
     md_cache: CommonMarkCache,
     has_changes: bool,
     preview_state: PreviewState,
     app_sender: Sender<ToApp>,
     toast_sender: Sender<Toast>,
     humanize_dates: bool,
+    force_save: bool,
 }
 
 impl NoteEditor {
@@ -58,6 +71,7 @@ impl NoteEditor {
             md_cache: CommonMarkCache::default(),
             humanize_dates: true,
             toast_sender,
+            force_save: false,
         }
     }
 
@@ -85,19 +99,28 @@ impl NoteEditor {
             }
         };
 
-        changes |= self.render_title_editor(ui, &mut active_note);
+        changes = changes || self.render_title_editor(ui, &mut active_note);
         ui.add(egui::Separator::default().horizontal().spacing(25.));
-        changes |= self.render_content_editor(ui, &mut active_note);
+        changes = changes || self.render_content_editor(ui, &mut active_note);
         ui.add(egui::Separator::default().horizontal().spacing(25.));
-        changes |= self.render_tags_editor(ui, &mut active_note);
+        changes = changes || self.render_tags_editor(ui, &mut active_note);
         ui.add(egui::Separator::default().horizontal().spacing(25.));
-        changes |= self.render_reminders(ui, &mut active_note);
+        changes = changes || self.render_reminders(ui, &mut active_note);
         ui.add(egui::Separator::default().horizontal().spacing(25.));
         self.render_metadata(ui, &mut active_note);
 
         if changes {
             self.active_note = Some(active_note);
             self.has_changes = true;
+        }
+
+        if self.force_save {
+            self.force_save = false;
+            Self::send_app_msg(&self.app_sender, ToApp::SaveRequested);
+            Self::send_app_msg(
+                &self.app_sender,
+                ToApp::Toast(ToastKind::Info, "Force save requested...".to_string()),
+            );
         }
     }
 
@@ -112,6 +135,7 @@ impl NoteEditor {
     pub fn clear_note(&mut self) {
         self.active_tag = None;
         self.active_note = None;
+        self.active_reminder = None;
         self.has_changes = false;
         self.preview_state = PreviewState::Closed;
     }
@@ -141,6 +165,7 @@ impl NoteEditor {
 
         self.active_note = note;
         self.active_tag = None;
+        self.active_reminder = None;
         self.has_changes = false;
         self.preview_state = PreviewState::Closed;
     }
@@ -163,6 +188,12 @@ impl NoteEditor {
 }
 
 impl NoteEditor {
+    fn local_offset() -> time::UtcOffset {
+        static LOCAL_OFFSET: once_cell::sync::OnceCell<time::UtcOffset> =
+            once_cell::sync::OnceCell::new();
+        *LOCAL_OFFSET.get_or_init(|| time::UtcOffset::current_local_offset().unwrap())
+    }
+
     #[allow(clippy::unused_self)]
     fn render_title_editor(&self, ui: &mut egui::Ui, note: &mut Note) -> bool {
         let mut note_title = note.title().to_string();
@@ -299,13 +330,20 @@ impl NoteEditor {
         false
     }
 
+    /// Renders the list of reminders for the note editor. If the reminders are changed the active Note will be updated
+    /// and `true` will be returned. This will also set `self.active_reminder` based on user interactions.
     fn render_reminders(&mut self, ui: &mut egui::Ui, note: &mut Note) -> bool {
+        type ChronoUtcDate = chrono::Date<chrono::Utc>;
+        type TimeDate = time::Date;
+        use time::{Date, Time, UtcOffset};
+
         let mut reminders = note.reminders().to_vec();
         let mut removals: Vec<usize> = Vec::new();
         let mut reminders_changed = false;
         ui.add(egui::Label::new(
             egui::RichText::new("Reminders:").underline(),
         ));
+        ui.add_space(10.);
 
         if reminders.is_empty() {
             ui.add(egui::Label::new(
@@ -316,22 +354,30 @@ impl NoteEditor {
 
             match self.active_reminder {
                 Some((idx, state)) => {
-                    egui::Grid::new(grid_id).num_columns(3).show(ui, |ui| {
-                        for (i, reminder) in reminders.iter_mut().enumerate() {
-                            ui.add(egui::Label::new(reminder.due_display()));
-                            ui.add(egui::Label::new(reminder.text()));
-                            if ui.small_button("x").clicked() {
-                                removals.push(i);
+                    egui::Grid::new(grid_id)
+                        .num_columns(4)
+                        .min_col_width(20.)
+                        .max_col_width(60.)
+                        .show(ui, |ui| {
+                            for (i, reminder) in reminders.iter_mut().enumerate() {
+                                if i == idx {
+                                    reminders_changed |=
+                                        self.render_enabled_reminder_line(ui, reminder, i, state);
+                                } else {
+                                    self.render_disabled_reminder_line(ui, reminder, i);
+                                }
+
+                                if ui.small_button("x").clicked() {
+                                    removals.push(i);
+                                }
+                                ui.end_row();
                             }
-                            ui.end_row();
-                        }
-                    });
+                        });
                 }
                 None => {
-                    egui::Grid::new(grid_id).num_columns(3).show(ui, |ui| {
+                    egui::Grid::new(grid_id).num_columns(4).show(ui, |ui| {
                         for (i, reminder) in reminders.iter_mut().enumerate() {
-                            ui.add(egui::Label::new(reminder.due_display()));
-                            ui.add(egui::Label::new(reminder.text()));
+                            self.render_disabled_reminder_line(ui, reminder, i);
                             if ui.small_button("x").clicked() {
                                 removals.push(i);
                             }
@@ -344,7 +390,7 @@ impl NoteEditor {
 
         if ui.small_button("Create Reminder").clicked() {
             reminders.push(Reminder::default());
-            // self.active_reminder = Some((reminders.len() - 1, ActiveReminder::Text));
+            self.active_reminder = Some((reminders.len() - 1, ReminderFocus::Text));
             reminders_changed = true;
         }
 
@@ -359,6 +405,7 @@ impl NoteEditor {
 
         if reminders_changed {
             note.set_reminders(reminders);
+            self.force_save = true;
         }
 
         reminders_changed
@@ -387,6 +434,206 @@ impl NoteEditor {
                 }
             });
         });
+    }
+
+    fn render_enabled_reminder_line(
+        &mut self,
+        ui: &mut Ui,
+        reminder: &mut Reminder,
+        idx: usize,
+        focus: ReminderFocus,
+    ) -> bool {
+        let mut changes = false;
+        let (mut hour, mut min, mut period) = reminder.get_due_time();
+        let mut date = reminder
+            .get_due_date_chrono_local()
+            .with_timezone(&chrono::Utc);
+
+        if focus == ReminderFocus::Date {
+            let picker = egui_extras::DatePickerButton::new(&mut date);
+
+            let dp_res = ui.add(picker);
+
+            if dp_res.changed() || dp_res.lost_focus() {
+                changes = true;
+                reminder.set_due_date_chrono(&date);
+            }
+
+            if dp_res.lost_focus() {
+                self.active_reminder = None;
+            }
+        } else {
+            let dp_res =
+                ui.add(egui::Label::new(reminder.date_display()).sense(egui::Sense::click()));
+            if dp_res.double_clicked() {
+                self.active_reminder = Some((idx, ReminderFocus::Date));
+            }
+        }
+
+        if focus == ReminderFocus::Time {
+            let mut lost_focus = false;
+
+            changes |=
+                Self::render_time_picker(ui, reminder, idx, &mut lost_focus, &self.app_sender);
+
+            if lost_focus {
+                self.active_reminder = None;
+            }
+        } else {
+            let res = ui.add(egui::Label::new(reminder.time_display()).sense(egui::Sense::click()));
+            if res.double_clicked() {
+                self.active_reminder = Some((idx, ReminderFocus::Time));
+            }
+        }
+
+        if focus == ReminderFocus::Text {
+            let mut reminder_text = reminder.text().to_string();
+            let text_res = ui.text_edit_singleline(&mut reminder_text);
+
+            if text_res.changed() {
+                changes = true;
+                reminder.set_text(&reminder_text);
+            }
+
+            if text_res.lost_focus() {
+                self.active_reminder = None;
+            }
+        } else {
+            let res = ui.add(egui::Label::new(reminder.text()));
+            if res.double_clicked() {
+                self.active_reminder = Some((idx, ReminderFocus::Text));
+            }
+        }
+
+        changes
+    }
+
+    fn render_disabled_reminder_line(&mut self, ui: &mut Ui, reminder: &mut Reminder, idx: usize) {
+        let dp_res = ui.add(egui::Label::new(reminder.date_display()).sense(egui::Sense::click()));
+        if dp_res.double_clicked() {
+            self.active_reminder = Some((idx, ReminderFocus::Date));
+        }
+
+        let res = ui.add(egui::Label::new(reminder.time_display()).sense(egui::Sense::click()));
+        if res.double_clicked() {
+            self.active_reminder = Some((idx, ReminderFocus::Time));
+        }
+
+        let res = ui.add(egui::Label::new(reminder.text()).sense(egui::Sense::click()));
+        if res.double_clicked() {
+            self.active_reminder = Some((idx, ReminderFocus::Text));
+        }
+    }
+
+    fn render_time_picker(
+        ui: &mut Ui,
+        reminder: &mut Reminder,
+        idx: usize,
+        lost_focus: &mut bool,
+        sender: &Sender<ToApp>,
+    ) -> bool {
+        static ONCE_HR: Once = Once::new();
+        static ONCE_MIN: Once = Once::new();
+        static ONCE_HOR: Once = Once::new();
+        const HOURS: &[u8] = &[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
+        const MINS: &[u8] = &[0, 15, 30, 45];
+
+        let mut changes = false;
+
+        let (mut hour, mut minute, mut period) = reminder.get_due_time();
+
+        let res = ui.horizontal(|ui| {
+            let hr_res = egui::ComboBox::from_id_source("time_picker_hour")
+                .width(20.)
+                .selected_text(hour.to_string())
+                .show_ui(ui, |ui| {
+                    HOURS
+                        .iter()
+                        .map(|&hr| {
+                            ui.selectable_value(&mut hour, Hour12::from_u8(hr), hr.to_string())
+                        })
+                        .collect::<Vec<_>>()
+                    // for hr in HOURS {
+                    //     ui.selectable_value(&mut hour, Hour::from_u8(*hr), hr.to_string());
+                    // }
+                });
+
+            if let Some(resps) = &hr_res.inner && resps.iter().any(egui::Response::changed) {
+            // if hr_res.response.changed() {
+                ONCE_HR.call_once(|| {
+                    sender
+                        .send(ToApp::Debug(format!(
+                            "Hour Response: {:#?}",
+                            hr_res.response
+                        )))
+                        .expect("Unable to send debug message to app");
+                });
+            }
+
+            changes |= hr_res.response.changed();
+
+            // if hr_res.inner.is_none() {
+            //     *lost_focus = true;
+            // }
+
+            let min_res = egui::ComboBox::from_id_source("time_picker_min")
+                .width(20.)
+                .selected_text(minute.to_string())
+                .show_ui(ui, |ui| {
+                    MINS.iter()
+                        .map(|&min| {
+                            ui.selectable_value(&mut minute, Minute::from_u8(min), min.to_string())
+                        })
+                        .collect::<Vec<_>>()
+                    // for min in MINS {
+                    //     ui.selectable_value(&mut minute, Minute::from_u8(*min), min.to_string());
+                    // }
+                });
+
+            if let Some(resps) = &min_res.inner && resps.iter().any(egui::Response::changed) {
+            // if min_res.response.changed() {
+                ONCE_MIN.call_once(|| {
+                    sender
+                        .send(ToApp::Debug(format!(
+                            "Minute Response: {:#?}",
+                            min_res.response
+                        )))
+                        .expect("Unable to send debug message to app");
+                });
+            }
+
+            let mut is_am = period == TimePeriod::Am;
+            if ui.toggle_value(&mut is_am, period.to_string()).clicked() {
+                period.toggle();
+                changes = true;
+            }
+
+            // if min_res.inner.is_none() {
+            //     *lost_focus = true;
+            // }
+            (hr_res, min_res)
+        });
+
+        if res.response.changed() {
+            ONCE_HOR.call_once(|| {
+                sender
+                    .send(ToApp::Debug(format!(
+                        "Horizontal Response: {:#?}",
+                        res.response
+                    )))
+                    .expect("Unable to send debug message to app");
+            });
+        }
+
+        if res.response.clicked_elsewhere() {
+            *lost_focus = true;
+        }
+
+        if changes || *lost_focus {
+            reminder.set_due_hmp(hour, minute, period);
+        }
+
+        changes
     }
 
     fn send_app_msg(sender: &Sender<ToApp>, msg: ToApp) {

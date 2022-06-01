@@ -20,7 +20,6 @@ pub struct Note {
     title: String,
     content: String,
     tags: Vec<String>,
-    #[serde(default)]
     reminders: Vec<Reminder>,
     created: OffsetDateTime,
     updated: OffsetDateTime,
@@ -55,16 +54,16 @@ impl Note {
         }
     }
 
-    #[tracing::instrument(skip(dto), fields(title, content, tags, reminders))]
+    #[tracing::instrument(skip(dto), fields(dto.title, dto.content, dto.tags, dto.reminders))]
     #[must_use]
     pub fn create(dto: impl Into<CreateNote>) -> Self {
         let (title, content, tags, reminders) = dto.into().into_parts();
-        #[cfg(feature = "tracing")]
+        #[cfg(feature = "trace")]
         {
-            tracing::Span::current().record("title", &title);
-            tracing::Span::current().record("content", &content);
-            tracing::Span::current().record("tags", &tags);
-            tracing::Span::current().record("reminders", &reminders);
+            tracing::Span::current().record("dto.title", &format!("{:?}", &title).as_str());
+            tracing::Span::current().record("dto.content", &format!("{:?}", &content).as_str());
+            tracing::Span::current().record("dto.tags", &format!("{:?}", &tags).as_str());
+            tracing::Span::current().record("dto.reminders", &format!("{:?}", &reminders).as_str());
         }
         Self {
             id: TinyId::random(),
@@ -79,16 +78,16 @@ impl Note {
         }
     }
 
-    #[tracing::instrument(skip_all, fields(title, content, tags, reminders))]
+    #[tracing::instrument(skip_all, fields(dto.title, dto.content, dto.tags, dto.reminders))]
     #[must_use]
     pub fn create_for(db: &crate::db::Database, dto: impl Into<CreateNote>) -> Self {
         let (title, content, tags, reminders) = dto.into().into_parts();
-        #[cfg(feature = "tracing")]
+        #[cfg(feature = "trace")]
         {
-            tracing::Span::current().record("title", &title);
-            tracing::Span::current().record("content", &content);
-            tracing::Span::current().record("tags", &tags);
-            tracing::Span::current().record("reminders", &reminders);
+            tracing::Span::current().record("dto.title", &format!("{:?}", &title).as_str());
+            tracing::Span::current().record("dto.content", &format!("{:?}", &content).as_str());
+            tracing::Span::current().record("dto.tags", &format!("{:?}", &tags).as_str());
+            tracing::Span::current().record("dto.reminders", &format!("{:?}", &reminders).as_str());
         }
         Self {
             id: db.create_id(),
@@ -107,13 +106,13 @@ impl Note {
     pub fn update(&mut self, dto: impl Into<UpdateNote>) -> bool {
         let (id, title, content, tags, reminders) = dto.into().into_parts();
 
-        #[cfg(feature = "tracing")]
+        #[cfg(feature = "trace")]
         {
-            tracing::Span::current().record("dto.id", &id);
-            tracing::Span::current().record("dto.title", &title);
-            tracing::Span::current().record("dto.content", &content);
-            tracing::Span::current().record("dto.tags", &tags);
-            tracing::Span::current().record("dto.reminders", &reminders);
+            tracing::Span::current().record("dto.id", &id.to_string().as_str());
+            tracing::Span::current().record("dto.title", &format!("{:?}", &title).as_str());
+            tracing::Span::current().record("dto.content", &format!("{:?}", &content).as_str());
+            tracing::Span::current().record("dto.tags", &format!("{:?}", &tags).as_str());
+            tracing::Span::current().record("dto.reminders", &format!("{:?}", &reminders).as_str());
         }
 
         if id != self.id {
@@ -150,7 +149,11 @@ impl Note {
         self.dirty
     }
 
-    pub fn update_from(&mut self, other: &Note) {
+    /// Updates this note to match the given note, **if the IDs match**.
+    ///
+    /// ### Note that this does **NOT** set the `dirty` flag. This method is intended to be used as an alternative to an `update` DTO.
+    #[tracing::instrument(level = "trace")]
+    pub(crate) fn update_from(&mut self, other: &Note) {
         if self.id != other.id {
             return;
         }
@@ -158,12 +161,14 @@ impl Note {
         self.title = other.title.clone();
         self.content = other.content.clone();
         self.tags = other.tags.clone();
+        self.reminders = other.reminders.clone();
         self.created = other.created;
         self.updated = other.updated;
         self.dirty = false;
         self.pending_delete = false;
     }
 
+    #[tracing::instrument(level = "trace", skip(dto), fields(dto))]
     pub fn delete(&mut self, dto: impl Into<DeleteNote>) -> bool {
         let id = *dto.into().id();
         if self.id == id {
@@ -171,19 +176,27 @@ impl Note {
             self.pending_delete = true;
         }
 
+        #[cfg(feature = "trace")]
+        {
+            tracing::Span::current().record("dto.id", &id.to_string().as_str());
+        }
+
         self.pending_delete
     }
 
+    #[tracing::instrument(level = "trace")]
     #[must_use]
     pub fn id(&self) -> TinyId {
         self.id
     }
 
+    #[tracing::instrument(level = "trace")]
     #[must_use]
     pub fn title(&self) -> &str {
         &self.title
     }
 
+    #[tracing::instrument(level = "trace")]
     pub fn set_title(&mut self, title: &str) {
         if self.title != title {
             self.title = title.to_string();
@@ -192,6 +205,7 @@ impl Note {
         }
     }
 
+    #[tracing::instrument(level = "trace", skip(f))]
     pub fn update_title(&mut self, f: impl FnOnce(&str) -> String) {
         let new = f(&self.title);
         if new != self.title {
@@ -201,11 +215,13 @@ impl Note {
         }
     }
 
+    #[tracing::instrument(level = "trace")]
     #[must_use]
     pub fn content(&self) -> &str {
         &self.content
     }
 
+    #[tracing::instrument(level = "trace")]
     pub fn set_content(&mut self, content: &str) {
         if self.content != content {
             self.content = content.to_string();
@@ -214,6 +230,7 @@ impl Note {
         }
     }
 
+    #[tracing::instrument(level = "trace", skip(f))]
     pub fn update_content(&mut self, f: impl FnOnce(&str) -> String) {
         let new = f(&self.content);
         if new != self.content {
@@ -223,6 +240,7 @@ impl Note {
         }
     }
 
+    #[tracing::instrument(level = "trace")]
     pub fn append_content(&mut self, content: &str) {
         if !content.is_empty() {
             if !self.content().ends_with(' ') && !content.starts_with(' ') {
@@ -234,24 +252,26 @@ impl Note {
         }
     }
 
+    #[tracing::instrument(level = "trace")]
     #[must_use]
     pub fn reminders(&self) -> &[Reminder] {
         &self.reminders
     }
 
+    #[tracing::instrument(level = "trace")]
     pub fn set_reminders(&mut self, reminders: Vec<Reminder>) {
-        if self.reminders != reminders {
-            self.reminders = reminders;
-            self.set_updated_now();
-            self.dirty = true;
-        }
+        self.reminders = reminders;
+        self.set_updated_now();
+        self.dirty = true;
     }
 
+    #[tracing::instrument(level = "trace", skip(f))]
     pub fn update_reminders(&mut self, f: impl FnOnce(&[Reminder]) -> Vec<Reminder>) {
         let new = f(&self.reminders);
         self.set_reminders(new);
     }
 
+    #[tracing::instrument(level = "trace")]
     pub fn add_reminder(&mut self, reminder: Reminder) {
         if !self.reminders.contains(&reminder) {
             self.reminders.push(reminder);
@@ -260,19 +280,27 @@ impl Note {
         }
     }
 
+    #[tracing::instrument(level = "trace")]
     pub fn remove_reminder(&mut self, reminder: &Reminder) {
-        if let Some(index) = self.reminders.iter().position(|r| r.id() == reminder.id()) {
+        self.remove_reminder_with_id(reminder.id());
+    }
+
+    #[tracing::instrument(level = "trace")]
+    pub fn remove_reminder_with_id(&mut self, id: TinyId) {
+        if let Some(index) = self.reminders.iter().position(|r| r.id() == id) {
             self.reminders.remove(index);
             self.set_updated_now();
             self.dirty = true;
         }
     }
 
+    #[tracing::instrument(level = "trace")]
     #[must_use]
     pub fn tags(&self) -> &[String] {
         &self.tags
     }
 
+    #[tracing::instrument(level = "trace")]
     pub fn set_tags(&mut self, mut tags: Vec<String>) {
         // tags.sort_unstable();
         // tags.dedup();
@@ -283,11 +311,13 @@ impl Note {
         }
     }
 
+    #[tracing::instrument(level = "trace", skip(f))]
     pub fn update_tags(&mut self, f: impl FnOnce(&[String]) -> Vec<String>) {
         let new = f(&self.tags);
         self.set_tags(new);
     }
 
+    #[tracing::instrument(level = "trace")]
     pub fn add_tag(&mut self, tag: String) {
         if !self.tags.contains(&tag) {
             self.tags.push(tag);
@@ -296,6 +326,7 @@ impl Note {
         }
     }
 
+    #[tracing::instrument(level = "trace")]
     pub fn remove_tag(&mut self, tag: &str) {
         if let Some(index) = self.tags.iter().position(|t| t == tag) {
             self.tags.remove(index);
@@ -304,89 +335,145 @@ impl Note {
         }
     }
 
+    #[tracing::instrument(level = "trace")]
     #[must_use]
     pub fn tag_len(&self) -> usize {
         self.tags.len()
     }
 
+    #[tracing::instrument(level = "trace")]
     #[must_use]
     pub fn created(&self) -> &OffsetDateTime {
         &self.created
     }
 
+    #[tracing::instrument(level = "trace")]
     #[must_use]
     pub fn created_humanized(&self) -> impl std::fmt::Display {
         crate::util::dtf::humanize_timespan_to_now(self.created)
     }
 
+    #[tracing::instrument(level = "trace")]
     #[must_use]
     pub fn updated(&self) -> &OffsetDateTime {
         &self.updated
     }
 
+    #[tracing::instrument(level = "trace")]
     #[must_use]
     pub fn updated_humanized(&self) -> impl std::fmt::Display {
         crate::util::dtf::humanize_timespan_to_now(self.updated)
     }
 
+    #[tracing::instrument(level = "trace")]
     #[must_use]
     pub fn dirty(&self) -> bool {
         self.dirty
     }
 
+    #[tracing::instrument(level = "trace")]
     pub fn set_dirty(&mut self, dirty: bool) {
         self.dirty = dirty;
     }
 
+    #[tracing::instrument(level = "trace")]
     #[must_use]
     pub fn pending_delete(&self) -> bool {
         self.pending_delete
     }
 
+    #[tracing::instrument(level = "trace")]
     pub fn set_pending_delete(&mut self, pending_delete: bool) {
         self.pending_delete = pending_delete;
     }
 
+    #[tracing::instrument(level = "trace")]
     #[must_use]
     pub fn title_contains(&self, text: &str) -> bool {
         self.title.contains(text)
     }
 
+    #[tracing::instrument(level = "trace")]
     #[must_use]
     pub fn title_matches(&self, text: &str) -> bool {
         self.title == text
     }
 
+    #[tracing::instrument(level = "trace")]
     #[must_use]
     pub fn content_contains(&self, text: &str) -> bool {
         self.content.contains(text)
     }
 
+    #[tracing::instrument(level = "trace")]
     #[must_use]
     pub fn content_matches(&self, text: &str) -> bool {
         self.content == text
     }
 
+    #[tracing::instrument(level = "trace")]
     #[must_use]
     pub fn tag_contains(&self, text: &str) -> bool {
         self.tags.iter().any(|tag| tag.contains(text))
     }
 
+    #[tracing::instrument(level = "trace")]
     #[must_use]
     pub fn tag_matches(&self, text: &str) -> bool {
         self.tags.iter().any(|tag| tag == text)
     }
 
+    #[tracing::instrument(level = "trace")]
     #[must_use]
     pub fn full_text_search(&self, text: &str) -> bool {
         self.title_contains(text) || self.content_contains(text) || self.tag_contains(text)
     }
 
+    #[tracing::instrument(level = "trace")]
+    pub fn remove_empty_tags(&mut self) {
+        let before = self.tags.len();
+        self.tags.retain(|r| !r.is_empty());
+        if before != self.tags.len() {
+            self.set_updated_now();
+            self.dirty = true;
+        }
+    }
+
+    #[tracing::instrument(level = "trace")]
+    pub fn remove_cleared_reminders(&mut self) {
+        let before = self.reminders.len();
+        self.reminders.retain(|r| !r.is_null());
+        if before != self.reminders.len() {
+            self.set_updated_now();
+            self.dirty = true;
+        }
+    }
+
+    #[must_use]
+    pub fn ids_used(&self) -> Vec<TinyId> {
+        let mut ids = if self.id.is_null() {
+            vec![]
+        } else {
+            vec![self.id]
+        };
+
+        for reminder in &self.reminders {
+            let id = reminder.id();
+            if !id.is_null() {
+                ids.push(id);
+            }
+        }
+
+        ids
+    }
+
+    #[tracing::instrument(level = "trace")]
     pub(crate) fn clear_flags(&mut self) {
         self.dirty = false;
         self.pending_delete = false;
     }
 
+    #[tracing::instrument(level = "trace")]
     pub(crate) fn make_invalid(&mut self) {
         self.id = TinyId::null();
         self.dirty = false;
@@ -394,10 +481,12 @@ impl Note {
         self.title = String::new();
         self.content = String::new();
         self.tags = Vec::new();
+        self.reminders = Vec::new();
         self.created = OffsetDateTime::UNIX_EPOCH;
         self.updated = OffsetDateTime::UNIX_EPOCH;
     }
 
+    #[tracing::instrument(level = "trace")]
     pub fn touch(&mut self) {
         self.set_updated_now();
         self.set_dirty(true);
@@ -409,6 +498,7 @@ impl Note {
 }
 
 impl std::fmt::Display for Note {
+    #[tracing::instrument(level = "trace", skip(f))]
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         // let fd = time::macros::format_description!("[weekday], [month repr:short] [day], [year] [hour repr:12]:[minute]:[second][period case:lower]");
         writeln!(f, "ID: {}", self.id)?;
@@ -421,9 +511,33 @@ impl std::fmt::Display for Note {
     }
 }
 
-impl PartialEq<Note> for Note {
-    fn eq(&self, other: &Note) -> bool {
+impl PartialEq<Self> for Note {
+    fn eq(&self, other: &Self) -> bool {
         self.id == other.id
+    }
+}
+
+impl PartialEq<&Self> for Note {
+    fn eq(&self, other: &&Self) -> bool {
+        self.id == other.id
+    }
+}
+
+impl PartialOrd<Self> for Note {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        self.id().partial_cmp(&other.id())
+    }
+}
+
+impl PartialOrd<&Self> for Note {
+    fn partial_cmp(&self, other: &&Self) -> Option<std::cmp::Ordering> {
+        self.id.partial_cmp(&other.id())
+    }
+}
+
+impl std::hash::Hash for Note {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.id.hash(state);
     }
 }
 

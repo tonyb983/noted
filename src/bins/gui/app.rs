@@ -469,16 +469,12 @@ impl GuiApp {
                                     }
                                 });
                         });
-                    // .show_rows(ui, row_height, self.error_log.len(), |ui, range| {
-                    //     for i in range {
-                    //         ui.add(egui::Label::new(&self.error_log[i]));
-                    //     }
-                    // });
                 })
             });
     }
 
     fn render_exit_prompt(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
+        use std::io::{Read, Write};
         self.deleting_state = DeletingState::None;
         egui::Window::new("Save before exiting?")
             .collapsible(false)
@@ -488,6 +484,27 @@ impl GuiApp {
                     if ui.button("Yes").clicked() {
                         self.save_data();
                         self.exit_state = ExitState::Exiting;
+                        if !self.error_log.is_empty() {
+                            if let Some(path) = rfd::FileDialog::new()
+                                .set_directory(Path::new(env!("CARGO_MANIFEST_DIR")).join("logs"))
+                                .add_filter("Log", &["log", "txt"])
+                                .set_file_name(&format!(
+                                    "gui.log.{}.log",
+                                    std::time::UNIX_EPOCH
+                                        .elapsed()
+                                        .expect("Unable to get time since epoch")
+                                        .as_secs()
+                                ))
+                                .save_file()
+                            {
+                                let mut file = std::io::BufWriter::new(
+                                    std::fs::File::create(path).expect("Unable to create file"),
+                                );
+                                for error in &self.error_log {
+                                    writeln!(file, "{}", error).expect("Unable to write to file");
+                                }
+                            }
+                        }
                         frame.quit();
                     }
 
@@ -505,7 +522,6 @@ impl GuiApp {
 
     fn render_toasts(&mut self, ctx: &egui::Context) {
         let mut anchor = ctx.input().screen_rect().shrink(5.0).max;
-        anchor.x *= 0.95;
         let mut toasts = Toasts::new(ctx)
             .direction(egui::Direction::BottomUp)
             .anchor(anchor)
@@ -528,6 +544,7 @@ impl GuiApp {
 
 impl eframe::App for GuiApp {
     #[allow(clippy::cast_possible_truncation)]
+    #[allow(clippy::too_many_lines, reason = "TODO: Refactor This")]
     fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
         crate::profile_guard!("update", "gui::GuiApp");
 
@@ -612,6 +629,21 @@ impl eframe::App for GuiApp {
                         }
                     }
                     ToApp::SaveRequested => self.save_data(),
+                    ToApp::Toast(kind, text) => {
+                        self.toast_tx
+                            .send(Toast {
+                                kind,
+                                text: text.into(),
+                                options: default_toast_options(),
+                            })
+                            .expect("unable to redirect toast");
+                    }
+                    ToApp::Error(msg) => {
+                        self.error_log.push(msg);
+                    }
+                    ToApp::Debug(msg) => {
+                        self.error_log.push(format!("DEBUG: {}", msg));
+                    }
                 },
                 Err(err) => {
                     self.error_log

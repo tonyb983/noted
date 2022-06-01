@@ -23,6 +23,7 @@ pub enum Error {
     NotImplemented(String),
     TinyId(TinyIdError),
     Interface(String),
+    Time(time::Error),
 }
 
 impl Error {
@@ -90,6 +91,7 @@ impl std::fmt::Display for Error {
             Self::NotImplemented(s) => write!(f, "Not implemented: {}", s),
             Self::TinyId(e) => e.fmt(f),
             Self::Interface(s) => write!(f, "User interface error: {}", s),
+            Self::Time(e) => e.fmt(f),
         }
     }
 }
@@ -119,14 +121,20 @@ impl std::error::Error for Error {
     // }
 }
 
+impl From<time::Error> for Error {
+    fn from(err: time::Error) -> Self {
+        Self::Time(err)
+    }
+}
+
 impl From<std::env::VarError> for Error {
     fn from(e: std::env::VarError) -> Self {
-        Error::EnvVar(e)
+        Self::EnvVar(e)
     }
 }
 impl From<std::io::Error> for Error {
     fn from(err: std::io::Error) -> Self {
-        Error::Io(err)
+        Self::Io(err)
     }
 }
 impl From<serde_json::Error> for Error {
@@ -134,21 +142,6 @@ impl From<serde_json::Error> for Error {
         Self::Json(err)
     }
 }
-// impl From<ciborium::ser::Error<std::io::Error>> for Error {
-//     fn from(err: ciborium::ser::Error<std::io::Error>) -> Self {
-//         Self::SerDe(err.to_string())
-//     }
-// }
-// impl From<ciborium::de::Error<std::io::Error>> for Error {
-//     fn from(err: ciborium::de::Error<std::io::Error>) -> Self {
-//         Self::SerDe(err.to_string())
-//     }
-// }
-// impl From<Box<bincode::ErrorKind>> for Error {
-//     fn from(err: Box<bincode::ErrorKind>) -> Self {
-//         Self::SerDe(err.to_string())
-//     }
-// }
 impl From<rmp_serde::encode::Error> for Error {
     fn from(err: rmp_serde::encode::Error) -> Self {
         Self::SerDe(err.to_string())
@@ -159,26 +152,6 @@ impl From<rmp_serde::decode::Error> for Error {
         Self::SerDe(err.to_string())
     }
 }
-// impl From<flexbuffers::SerializationError> for Error {
-//     fn from(err: flexbuffers::SerializationError) -> Self {
-//         Self::SerDe(err.to_string())
-//     }
-// }
-// impl From<flexbuffers::DeserializationError> for Error {
-//     fn from(err: flexbuffers::DeserializationError) -> Self {
-//         Self::SerDe(err.to_string())
-//     }
-// }
-// impl From<sqlx::Error> for Error {
-//     fn from(err: sqlx::Error) -> Self {
-//         Self::Sqlx(err)
-//     }
-// }
-// impl From<rusqlite::Error> for Error {
-//     fn from(err: rusqlite::Error) -> Self {
-//         Self::Rusqlite(err)
-//     }
-// }
 impl From<DatabaseError> for Error {
     fn from(err: DatabaseError) -> Self {
         Self::Database(err)

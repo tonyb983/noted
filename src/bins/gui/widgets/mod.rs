@@ -10,8 +10,10 @@ mod note_editor;
 mod panels;
 mod screens;
 mod simple_prompt;
+mod time;
 mod toaster;
 
+pub use self::time::{DatePicker, HourMinutePicker};
 pub use list::NoteList;
 pub use msg::ToApp;
 pub use note_editor::NoteEditor;

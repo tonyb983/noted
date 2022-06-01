@@ -65,7 +65,7 @@ pub fn execute_with(
 
     note.set_title(title.as_str());
     note.set_content(content.as_str());
-    db.ensure_sync_v2(&mut note);
+    db.ensure_sync(&mut note);
 
     Ok(())
 }

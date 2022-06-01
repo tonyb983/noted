@@ -4,17 +4,12 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-use egui_toast::ToastKind;
+use eframe::egui;
 
-use crate::types::Note;
+pub struct DatePicker {}
 
-pub enum ToApp {
-    CreateNewNote,
-    SetActiveNote(Note),
-    DeleteNote(Note),
-    DeleteActiveNote,
-    SaveRequested,
-    Toast(ToastKind, String),
-    Error(String),
-    Debug(String),
+pub struct HourMinutePicker {}
+
+impl HourMinutePicker {
+    pub fn render(ui: &mut egui::Ui) {}
 }

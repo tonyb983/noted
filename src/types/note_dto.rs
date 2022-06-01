@@ -8,7 +8,7 @@ mod create {
     use serde::{Deserialize, Serialize};
 
     use crate::types::Reminder;
-    #[derive(Debug, Default, Clone, Serialize, Deserialize)]
+    #[derive(Debug, Default, PartialEq, PartialOrd, Clone, Hash, Serialize, Deserialize)]
     pub struct CreateNote {
         pub title: Option<String>,
         pub content: Option<String>,
@@ -172,7 +172,7 @@ mod update {
 
     use crate::types::Reminder;
 
-    #[derive(Debug, Clone, Serialize, Deserialize)]
+    #[derive(Debug, PartialEq, PartialOrd, Clone, Hash, Serialize, Deserialize)]
     pub struct UpdateNote {
         pub id: TinyId,
         pub title: Option<String>,
@@ -349,7 +349,7 @@ mod delete {
 
     use crate::types::Note;
 
-    #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+    #[derive(Debug, PartialEq, PartialOrd, Clone, Hash, Serialize, Deserialize)]
     pub struct DeleteNote {
         pub id: TinyId,
     }
@@ -395,7 +395,7 @@ mod dto {
     use super::{CreateNote, DeleteNote, UpdateNote};
     use serde::{Deserialize, Serialize};
 
-    #[derive(Debug, Clone, Serialize, Deserialize)]
+    #[derive(Debug, PartialEq, PartialOrd, Clone, Hash, Serialize, Deserialize)]
     pub enum NoteDto {
         Create(CreateNote),
         Update(UpdateNote),
@@ -533,7 +533,7 @@ mod ops {
 
             #[cfg(feature = "trace")]
             {
-                tracing::Span::current().record("result", &result);
+                tracing::Span::current().record("result", &result.as_str());
             }
 
             result
@@ -613,7 +613,7 @@ mod ops {
 
             #[cfg(feature = "trace")]
             {
-                tracing::Span::current().record("output", string);
+                tracing::Span::current().record("output", &string.as_str());
             }
         }
     }

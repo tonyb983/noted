@@ -6,12 +6,10 @@
 
 use std::{collections::HashSet, path::Path};
 
+use crossbeam_channel::{Receiver, Sender};
 use serde::{Deserialize, Serialize};
 use tinyid::TinyId;
 use uuid::Uuid;
-
-#[cfg(feature = "flame")]
-use flamer::flame as flame_fn;
 
 use crate::{
     types::{CreateNote, DeleteNote, Note, NoteDto, UpdateNote},
@@ -19,8 +17,11 @@ use crate::{
     DatabaseError, Error, Result, flame_guard,
 };
 
+use super::DatabaseMessage;
+
 /// Intermediate type that is used to serialize [`Database`] so that the
-/// internal ID-list can be built from the notes as it is constructed.
+/// internal ID-list can be built from the notes as it is constructed and
+/// does not need to be serialized as a duplicate.
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 struct IntermediateDatabase {
     notes: Vec<Note>,
@@ -35,23 +36,41 @@ impl TryFrom<IntermediateDatabase> for Database {
 }
 
 /// Implementation of a Database that stores data in a file.
-#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
+/// 
+/// State Changes:
+/// - 
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(try_from = "IntermediateDatabase")]
 pub struct Database {
     notes: Vec<Note>,
     #[serde(skip)]
     ids: HashSet<TinyId>,
+    #[serde(skip)]
+    sender: Sender<DatabaseMessage>,
+    #[serde(skip)]
+    receiver: Receiver<DatabaseMessage>,
+    // TODO: I think I should have an option to deactivate message sending since it will not be necessary in all scenarios.
+    //       There are two ways to go about this I can see, add a separate `send_messages` field like below, OR we could simply
+    //       hold the `sender` and `receiver` fields as an `Option` which would save from initializing them if they won't be used.
+    // send_messages: bool,
+    // OR
+    // channel: Option<(Sender<DatabaseMessage>, Receiver<DatabaseMessage>)>,
+    //       The second form would ensure that I don't need to verify that two different fields are Some
 }
 
 /// Constructors
 impl Database {
+    #[tracing::instrument(level = "trace")]
     #[must_use]
     pub fn empty() -> Self {
         crate::profile_guard!("empty", "db::file::Database");
+
+        let (sender, receiver) = crossbeam_channel::unbounded();
         
         Database {
             notes: Vec::new(),
             ids: HashSet::new(),
+            sender, receiver,
         }
     }
 
@@ -60,14 +79,24 @@ impl Database {
     /// ## Errors
     /// - [`DatabaseError::InvalidId`] if the given notes contains an invalid ID.
     /// - [`DatabaseError::InvalidState`] if a list of IDs cannot be built from the list of notes, usually indicating that the notes contain duplicate or invalid ids.
+    #[tracing::instrument(level = "trace", skip(notes))]
     pub fn from_notes(notes: &[Note]) -> Result<Self> {
-        crate::profile_guard!("from_notes", "db::file::Database");
+        // crate::profile_guard!("from_notes", "db::file::Database");
+
+        let (sender, receiver) = crossbeam_channel::unbounded();
 
         let mut db = Database {
             notes: notes.to_vec(),
             ids: notes.iter().map(Note::id).collect(),
+            sender, receiver,
         };
-        db.init()?;
+        if let Err(error) = db.init() {
+            #[cfg(feature = "trace")] {
+                tracing::error!(?error, "database initialization failed");
+            }
+            // No point in sending a message here as the channel could not possibly have a listener yet.
+            return Err(error);
+        }
         Ok(db)
     }
 
@@ -76,12 +105,20 @@ impl Database {
     /// ## Errors
     /// - [`DatabaseError::InvalidId`] if the given notes contains an invalid ID.
     /// - [`DatabaseError::InvalidState`] if a list of IDs cannot be built from the list of notes, usually indicating that the notes contain duplicate or invalid ids.
+    #[tracing::instrument(level = "trace", skip(notes))]
     pub fn from_notes_vec(notes: Vec<Note>) -> Result<Self> {
-        crate::profile_guard!("from_notes_vec", "db::file::Database");
+        // crate::profile_guard!("from_notes_vec", "db::file::Database");
 
         let ids = notes.iter().map(Note::id).collect();
-        let mut db = Database { notes, ids };
-        db.init()?;
+        let (sender, receiver) = crossbeam_channel::unbounded();
+        let mut db = Database { notes, ids, sender, receiver };
+        if let Err(error) = db.init() {
+            #[cfg(feature = "trace")] {
+                tracing::error!(?error, "database initialization failed");
+            }
+            // No point in sending a message here as the channel could not possibly have a listener yet.
+            return Err(error);
+        }
         Ok(db)
     }
 
@@ -91,8 +128,9 @@ impl Database {
     /// - [`DatabaseError::InvalidId`] if the given notes contains an invalid ID.
     /// - [`DatabaseError::InvalidState`] if a list of IDs cannot be built from the list of notes, usually indicating that the notes contain duplicate or invalid ids.
     /// - Forwards any errors from [`Persistence::load_from_bytes_default`].
+    #[tracing::instrument(level = "trace", skip(bytes))]
     pub fn load_from_bytes(bytes: &[u8]) -> Result<Self> {
-        crate::profile_guard!("load_from_bytes", "db::file::Database");
+        // crate::profile_guard!("load_from_bytes", "db::file::Database");
 
         Persistence::load_from_bytes_default(bytes)
     }
@@ -103,11 +141,18 @@ impl Database {
     /// - [`DatabaseError::InvalidId`] if the given notes contains an invalid ID.
     /// - [`DatabaseError::InvalidState`] if a list of IDs cannot be built from the list of notes, usually indicating that the notes contain duplicate or invalid ids.
     /// - Forwards any errors from [`Persistence::load_from_file_default`].
+    #[tracing::instrument(level = "trace", skip(path), fields(path = path.as_ref().display().to_string().as_str()))]
     pub fn load<P: AsRef<Path>>(path: P) -> Result<Self> {
-        crate::profile_guard!("load", "db::file::Database");
+        // crate::profile_guard!("load", "db::file::Database");
 
         let mut db: Self = Persistence::load_from_file_default(path)?;
-        db.init()?;
+        if let Err(error) = db.init() {
+            #[cfg(feature = "trace")] {
+                tracing::error!(?error, "database initialization failed");
+            }
+            // No point in sending a message here as the channel could not possibly have a listener yet.
+            return Err(error);
+        }
         Ok(db)
     }
 }
@@ -121,18 +166,37 @@ impl Database {
     ///
     /// ## Errors
     /// - See [`Persistence::save_to_file_default`].
+    #[tracing::instrument(level = "trace", skip(self, path), fields(path = path.as_ref().display().to_string().as_str()))]
     pub fn save<P: AsRef<Path>>(&self, path: P) -> Result {
-        crate::profile_guard!("save", "db::file::Database");
+        // crate::profile_guard!("save", "db::file::Database");
 
-        Persistence::save_to_file_default(self, path)
+        match Persistence::save_to_file_default(self, path.as_ref()) {
+            Ok(_) => {
+                #[cfg(feature = "trace")] {
+                    tracing::trace!(path = %path.as_ref().display().to_string(), "database saved to path");
+                }
+                Self::send_msg(&self.sender, DatabaseMessage::DataSaved { path: path.as_ref().display().to_string() });
+                Ok(())
+            },
+            Err(err) => {
+                #[cfg(feature = "trace")] {
+                    tracing::error!(error = ?err, "database initialization failed");
+                }
+
+                Self::send_error(&self.sender, || err.to_string());
+
+                Err(err)
+            },
+        }
     }
 
     /// Attempts to apply the given data transfer object to this [`Database`].
     ///
     /// ## Errors
     /// - See [`Database::apply_create`], [`Database::apply_update`], and [`Database::apply_delete`].
+    #[tracing::instrument(level = "trace", skip_all)]
     pub fn apply_dto(&mut self, dto: impl Into<NoteDto>) -> Result<DtoResponse> {
-        crate::profile_guard!("apply_dto", "db::file::Database");
+        // crate::profile_guard!("apply_dto", "db::file::Database");
 
         match dto.into() {
             NoteDto::Create(create_note) => {
@@ -152,14 +216,21 @@ impl Database {
     ///
     /// ## Errors
     /// - [`DatabaseError::DuplicateId`] if the given ID is already contained in this [`Database`].
+    #[tracing::instrument(level = "trace", skip_all)]
     pub fn apply_create(&mut self, create: impl Into<CreateNote>) -> Result<Note> {
-        crate::profile_guard!("apply_create", "db::file::Database");
+        // crate::profile_guard!("apply_create", "db::file::Database");
 
-        let create = create.into();
-        let note = Note::create_for(self, create);
+        let create: CreateNote = create.into();
+        let note = Note::create_for(self, create.clone());
         if !self.ids.insert(note.id()) {
-            return Err(DatabaseError::DuplicateId(note.id()).into());
+            #[cfg(feature = "trace")] {
+                tracing::error!(?create, ?note, "duplicate id created for note");
+            }
+            let error = DatabaseError::DuplicateId(note.id());
+            Self::send_error(&self.sender, || error.to_string());
+            return Err(error.into());
         }
+        Self::send_msg(&self.sender, DatabaseMessage::NoteCreated { dto: create, created: note.clone() });
         self.notes.push(note.clone());
         Ok(note)
     }
@@ -171,16 +242,29 @@ impl Database {
     ///
     /// ## Errors
     /// - [`DatabaseError::IdNotFound`] if the given ID is not found in this [`Database`].
+    #[tracing::instrument(level = "trace", skip_all)]
     pub fn apply_update(&mut self, update: impl Into<UpdateNote>) -> Result<bool> {
-        crate::profile_guard!("apply_update", "db::file::Database");
+        // crate::profile_guard!("apply_update", "db::file::Database");
 
         let update = update.into();
-        let mut note = self
-            .notes
-            .iter_mut()
-            .find(|n| n.id() == *update.id())
-            .ok_or_else(|| DatabaseError::IdNotFound(*update.id()))?;
-        Ok(note.update(update))
+
+        if let Some(idx) = self.notes.iter().position(|n| n.id() == update.id()) {
+            let before = self.notes[idx].clone();
+            if !self.notes[idx].update(update.clone()) {
+                return Ok(false);
+            }
+            self.notes[idx].clear_flags();
+            let after = self.notes[idx].clone();
+            #[cfg(feature = "trace")] {
+                tracing::trace!(?before, ?after, "note updated");
+            }
+            Self::send_msg(&self.sender, DatabaseMessage::NoteUpdated { before, after });
+            Ok(true)
+        } else {
+            let error = DatabaseError::IdNotFound(*update.id());
+            Self::send_error(&self.sender, || error.to_string());
+            Err(error.into())
+        }
     }
 
     /// Deletes an existing [`Note`] using the information from the [`DeleteNote`] dto.
@@ -189,46 +273,34 @@ impl Database {
     ///
     /// ## Errors
     /// - [`DatabaseError::IdNotFound`] if the given ID is not found in this [`Database`].
+    #[tracing::instrument(level = "trace", skip_all)]
     pub fn apply_delete(&mut self, delete: impl Into<DeleteNote>) -> Result<bool> {
-        crate::profile_guard!("apply_delete", "db::file::Database");
+        // crate::profile_guard!("apply_delete", "db::file::Database");
 
         let id = *delete.into().id();
         let start = self.notes.len();
         match self.notes.iter().position(|n| n.id() == id) {
             Some(index) => {
-                self.notes.remove(index);
+                let removed = self.notes.remove(index);
                 self.ids.remove(&id);
+                #[cfg(feature = "trace")] {
+                    tracing::trace!(?removed, "note deleted");
+                }
+                Self::send_msg(&self.sender, DatabaseMessage::NoteDeleted { deleted: removed});
+
                 Ok(true)
             }
-            None => Err(DatabaseError::IdNotFound(id).into()),
+            None => {
+                let error = DatabaseError::IdNotFound(id);
+                Self::send_error(&self.sender, || error.to_string());
+                Err(error.into())
+            },
         }
     }
 
-    /// Checks the given list of [`Note`]s, and applies any changes, modifications,
-    /// or pending deletions that are detected. This call will reset the flags on
-    /// each [`Note`], which is why it requires a mutable reference to each.
-    pub fn ensure_sync(&mut self, notes: &mut [Note]) {
-        crate::profile_guard!("ensure_sync", "db::file::Database");
-
-        for note in notes.iter_mut() {
-            if note.pending_delete() {
-                let _result = self.apply_delete(note.id());
-                note.clear_flags();
-                note.make_invalid();
-                continue;
-            }
-
-            if !note.dirty() {
-                continue;
-            }
-
-            self.upsert(note);
-            note.clear_flags();
-        }
-    }
-
-    pub fn ensure_sync_v2<'n>(&mut self, input: impl Into<OneOrMore<&'n mut Note>>) {
-        crate::profile_guard!("ensure_sync_v2", "db::file::Database");
+    #[tracing::instrument(level = "trace", skip_all)]
+    pub fn ensure_sync<'n>(&mut self, input: impl Into<OneOrMore<&'n mut Note>>) {
+        // crate::profile_guard!("ensure_sync", "db::file::Database");
         
         let input = input.into();
         for note in input.into_values() {
@@ -252,8 +324,9 @@ impl Database {
     ///
     /// ## Errors
     /// - [`DatabaseError::IdNotFound`] if the given ID is not found in this [`Database`].
+    #[tracing::instrument(level = "trace", skip(self))]
     pub fn get(&self, id: TinyId) -> Result<&Note> {
-        crate::profile_guard!("get", "db::file::Database");
+        // crate::profile_guard!("get", "db::file::Database");
         
         self.notes
             .iter()
@@ -265,8 +338,9 @@ impl Database {
     ///
     /// ## Errors
     /// - [`DatabaseError::IdNotFound`] if the given ID is not found in this [`Database`].
+    #[tracing::instrument(level = "trace", skip(self))]
     pub fn get_clone(&self, id: TinyId) -> Result<Note> {
-        crate::profile_guard!("get_clone", "db::file::Database");
+        // crate::profile_guard!("get_clone", "db::file::Database");
         
         self.notes
             .iter()
@@ -279,29 +353,58 @@ impl Database {
     ///
     /// ## Errors
     /// - [`DatabaseError::IdNotFound`] if the given ID is not found in this [`Database`].
-    pub fn get_and_modify(&mut self, id: TinyId, f: impl FnMut(&mut Note)) -> Result {
-        crate::profile_guard!("get_and_modify", "db::file::Database");
+    #[tracing::instrument(level = "trace", skip_all)]
+    pub fn get_and_modify(&mut self, id: TinyId, mut f: impl FnMut(&mut Note)) -> Result {
+        // crate::profile_guard!("get_and_modify", "db::file::Database");
         
-        self.notes
-            .iter_mut()
-            .find(|n| n.id() == id)
-            .map(f)
-            .ok_or_else(|| DatabaseError::IdNotFound(id).into())
+        if let Some(idx) = self.notes
+            .iter()
+            .position(|n| n.id() == id) {
+                let original = self.notes[idx].clone();
+                f(&mut self.notes[idx]);
+                if self.notes[idx].pending_delete() {
+                    // TODO: Delete this note
+                    let deleted = self.notes.remove(idx);
+                    self.ids.remove(&id);
+                    #[cfg(feature = "trace")] {
+                        tracing::trace!(?deleted, "note deleted by get_and_modify");
+                    }
+                    Self::send_msg(&self.sender, DatabaseMessage::NoteDeleted { deleted });
+                } else if self.notes[idx].dirty() {
+                    self.notes[idx].clear_flags();
+                    let updated = self.notes[idx].clone();
+                    #[cfg(feature = "trace")] {
+                        tracing::trace!(?original, ?updated, "note updated by get_and_modify");
+                    }
+                    Self::send_msg(&self.sender, DatabaseMessage::NoteUpdated { before: original, after: updated });
+                }
+                
+                Ok(())
+            } else {
+                let error = DatabaseError::IdNotFound(id);
+                #[cfg(feature = "trace")] {
+                    tracing::error!(?error, %id, "note with id not found");
+                }
+                Self::send_error(&self.sender, || error.to_string());
+                Err(error.into())
+            }
     }
 
     /// Returns a slice containing all [`Note`]s in this [`Database`].
+    #[tracing::instrument(level = "trace", skip_all)]
     #[must_use]
     pub fn get_all(&self) -> &[Note] {
-        crate::profile_guard!("get_all", "db::file::Database");
+        // crate::profile_guard!("get_all", "db::file::Database");
         
         &self.notes
     }
 
     /// TODO: This seems like it's going to be an expensive operation, should we consider keeping a
     ///       tag-list similar to the ID-list we are already storing?
+    #[tracing::instrument(level = "trace", skip_all)]
     #[must_use]
     pub fn get_all_tags(&self) -> Vec<&String> {
-        crate::profile_guard!("get_all_tags", "db::file::Database");
+        // crate::profile_guard!("get_all_tags", "db::file::Database");
         
         let mut tags = self.notes.iter().flat_map(Note::tags).collect::<Vec<_>>();
         tags.sort_unstable();
@@ -311,9 +414,10 @@ impl Database {
 
     /// TODO: This seems like it's going to be an expensive operation, should we consider keeping a
     ///       tag-list similar to the ID-list we are already storing?
+    #[tracing::instrument(level = "trace", skip_all)]
     #[must_use]
     pub fn get_all_tags_v2(&self) -> Vec<&String> {
-        crate::profile_guard!("get_all_tags_v2", "db::file::Database");
+        // crate::profile_guard!("get_all_tags_v2", "db::file::Database");
         
         let mut tags = std::collections::HashSet::new();
         for note in &self.notes {
@@ -322,9 +426,10 @@ impl Database {
         tags.into_iter().collect()
     }
 
+    #[tracing::instrument(level = "trace", skip_all)]
     #[must_use]
     pub fn get_all_tags_and_counts(&self) -> Vec<(String, usize)> {
-        crate::profile_guard!("get_all_tags_and_counts", "db::file::Database");
+        // crate::profile_guard!("get_all_tags_and_counts", "db::file::Database");
         
         let mut map = std::collections::HashMap::new();
         for note in &self.notes {
@@ -337,57 +442,86 @@ impl Database {
 
     /// Returns a [`Vec`] containing all [`Note`]s in this [`Database`] that match
     /// the given predicate `pred`.
+    #[tracing::instrument(level = "trace", skip_all, fields(len))]
     #[must_use]
     pub fn find(&self, pred: impl Fn(&&Note) -> bool) -> Vec<&Note> {
-        crate::profile_guard!("find", "db::file::Database");
+        // crate::profile_guard!("find", "db::file::Database");
         
-        self.notes.iter().filter(pred).collect::<Vec<_>>()
+        let results = self.notes.iter().filter(pred).collect::<Vec<_>>();
+        
+        #[cfg(feature = "trace")] {
+            tracing::Span::current().record("len", &results.len());
+        }
+
+        results
     }
 
     /// Performs a full text search using `query` against all [`Note`]s in this [`Database`].
+    #[tracing::instrument(level = "trace", skip(self), fields(len))]
     #[must_use]
     pub fn text_search(&self, query: &str) -> Vec<&Note> {
-        crate::profile_guard!("text_search", "db::file::Database");
+        // crate::profile_guard!("text_search", "db::file::Database");
         
-        self.notes
+        let results = self.notes
             .iter()
             .filter(|n| n.full_text_search(query))
-            .collect::<Vec<_>>()
+            .collect::<Vec<_>>();
+
+        #[cfg(feature = "trace")] {
+            tracing::Span::current().record("len", &results.len());
+        }
+
+        results
     }
 
     /// The number of [`Note`]s in this [`Database`].
+    #[tracing::instrument(level = "trace", skip(self), fields(len))]
     #[must_use]
     pub fn len(&self) -> usize {
-        crate::profile_guard!("len", "db::file::Database");
+        // crate::profile_guard!("len", "db::file::Database");
         
-        self.notes.len()
+        let len = self.notes.len();
+        #[cfg(feature = "trace")] {
+            tracing::Span::current().record("len", &len);
+        }
+        len
     }
 
     /// Whether this [`Database`] is currently empty (contains zero [`Note`]s).
+    #[tracing::instrument(level = "trace", skip_all)]
     #[must_use]
     pub fn is_empty(&self) -> bool {
-        crate::profile_guard!("is_empty", "db::file::Database");
+        // crate::profile_guard!("is_empty", "db::file::Database");
         
         self.notes.is_empty()
     }
 
     /// Checks whether the given `id` is currently being used in this [`Database`].
+    #[tracing::instrument(level = "trace", skip(self), fields(result))]
     #[must_use]
     pub fn id_in_use(&self, id: TinyId) -> bool {
-        crate::profile_guard!("id_in_use", "db::file::Database");
+        // crate::profile_guard!("id_in_use", "db::file::Database");
         
-        self.notes.iter().any(|n| n.id() == id)
+        let result = self.notes.iter().any(|n| n.id() == id);
+        #[cfg(feature = "trace")] {
+            tracing::Span::current().record("result", &result);
+        }
+        result
     }
 
     /// Attempts to create a new [`TinyId`] using [`TinyId::random_against_db`].
     ///
     /// **This does NOT add the returned ID to the db in any way.**
+    #[tracing::instrument(level = "trace", skip(self), fields(result))]
     pub(crate) fn create_id(&self) -> TinyId {
-        crate::profile_guard!("create_id", "db::file::Database");
+        // crate::profile_guard!("create_id", "db::file::Database");
         
         let mut id = TinyId::random();
         while self.ids.contains(&id) {
             id = TinyId::random();
+        }
+        #[cfg(feature = "trace")] {
+            tracing::Span::current().record("result", &id.to_string().as_str());
         }
         id
     }
@@ -396,11 +530,17 @@ impl Database {
     ///
     /// ## Errors
     /// - [`DatabaseError::DuplicateId`] if the given ID is already in use.
+    #[tracing::instrument(level = "trace", skip(self))]
     pub fn insert(&mut self, note: &Note) -> Result {
-        crate::profile_guard!("insert", "db::file::Database");
+        // crate::profile_guard!("insert", "db::file::Database");
         
         if self.id_in_use(note.id()) {
-            return Err(DatabaseError::DuplicateId(note.id()).into());
+            let error = DatabaseError::DuplicateId(note.id());
+            #[cfg(feature = "trace")] {
+                tracing::error!(insertion = ?note, "duplicate ID attempted to be inserted into db");
+            }
+            Self::send_error(&self.sender, || error.to_string());
+            return Err(error.into());
         }
         self.notes.push(note.clone());
         self.ids.insert(note.id());
@@ -408,13 +548,21 @@ impl Database {
     }
 
     /// Inserts the given [`Note`] into the [`Database`] if it doesn't already exist, updating it otherwise.
+    #[tracing::instrument(level = "trace", skip(self))]
     pub fn upsert(&mut self, note: &Note) {
-        crate::profile_guard!("upsert", "db::file::Database");
+        // crate::profile_guard!("upsert", "db::file::Database");
         
         if let Err(err) = self.insert(note) && let Error::Database(DatabaseError::DuplicateId(id)) = err {
                 self.get_and_modify(id, |n| n.update_from(note))
                     .expect("file::Database::upsert - note already confirmed to exist in db");
         }
+    }
+
+    /// Currently this is guaranteed to be `Some`
+    #[tracing::instrument(level = "trace", skip(self))]
+    #[must_use] 
+    pub fn get_receiver(&self) -> Option<Receiver<DatabaseMessage>> {
+        Some(self.receiver.clone())
     }
 }
 
@@ -450,6 +598,7 @@ impl Database {
         Database::from_notes_vec(notes).expect("Failed to create random database!")
     }
 
+    #[tracing::instrument(skip(self, writer))]
     pub(crate) fn save_dev_with(
         &self,
         filename: &str,
@@ -457,7 +606,7 @@ impl Database {
     ) -> Result {
         use std::fs::File;
         use std::io::Write;
-        crate::profile_guard!("save_dev_with", "db::file::Database");
+        // crate::profile_guard!("save_dev_with", "db::file::Database");
         
         let project_dir = std::env::var("CARGO_MANIFEST_DIR")?;
         let path = Path::new(&project_dir).join("data").join(filename);
@@ -467,6 +616,7 @@ impl Database {
         Ok(())
     }
 
+    #[tracing::instrument]
     pub(crate) fn load_dev() -> Result<Self> {
         crate::profile_guard!("load_dev", "db::file::Database");
         
@@ -475,6 +625,7 @@ impl Database {
         Self::load(path)
     }
 
+    #[tracing::instrument(skip(f))]
     pub(crate) fn load_dev_with(
         filename: &str,
         f: impl FnOnce(std::io::BufReader<std::fs::File>) -> Result<Self>,
@@ -492,18 +643,23 @@ impl Database {
         Ok(db)
     }
 
+    #[tracing::instrument(skip(self))]
     fn validate(&mut self) -> Result {
-        crate::profile_guard!("validate", "db::file::Database");
+        const ID_NOTE_MISMATCH_MSG: &str = "register_ids could not successfully build id list";
         
         if self.ids.len() != self.notes.len() {
             self.register_ids();
         }
 
         if self.ids.len() != self.notes.len() {
-            return Err(DatabaseError::InvalidState(
-                "register_ids could not successfully build id list".to_string(),
-            )
-            .into());
+            #[cfg(feature = "trace")] {
+                tracing::error!(ids = ?self.ids, notes = ?self.notes, "Failed to synchronize note-list and id-list");
+            }
+            
+            let msg = ID_NOTE_MISMATCH_MSG.to_string();
+            Self::send_error(&self.sender, || msg.clone());
+            
+            return Err(DatabaseError::InvalidState(msg).into());
         }
 
         if self.notes.iter().any(|n| !n.id().is_valid()) {
@@ -512,8 +668,9 @@ impl Database {
         Ok(())
     }
 
+    #[tracing::instrument(skip(self))]
     fn register_ids(&mut self) {
-        crate::profile_guard!("register_ids", "db::file::Database");
+        // crate::profile_guard!("register_ids", "db::file::Database");
         
         self.ids.clear();
         self.ids = HashSet::with_capacity(self.notes.len());
@@ -522,11 +679,24 @@ impl Database {
         }
     }
 
+    #[tracing::instrument(skip(self))]
     fn init(&mut self) -> Result {
-        crate::profile_guard!("init", "db::file::Database");
+        // crate::profile_guard!("init", "db::file::Database");
         
         self.validate()?;
         Ok(())
+    }
+
+    fn send_msg(sender: &Sender<DatabaseMessage>, msg: DatabaseMessage) {
+        if let Err(err) = sender.send(msg) {
+            tracing::error!(error = ?err, "Failed to send database message");
+        }
+    }
+
+    /// Making this take a lambda instead of a string should ensure that it is lazily evaluated which
+    /// would give flexibility when I made message sending optional.
+    fn send_error(sender: &Sender<DatabaseMessage>, err: impl FnOnce() -> String) {
+        Self::send_msg(sender, DatabaseMessage::Error { msg: err() });
     }
 }
 
@@ -565,9 +735,6 @@ pub enum UpdateFailurePolicy {
 
 #[cfg(test)]
 mod tests {
-    #[cfg(feature = "flame")]
-    use flamer::flame as flame_fn;
-
     use crate::Method;
 
     use super::*;

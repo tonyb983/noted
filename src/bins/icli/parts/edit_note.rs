@@ -50,7 +50,7 @@ pub fn execute_with(
             }
             _ => unreachable!(),
         } {
-            db.ensure_sync_v2(&mut note);
+            db.ensure_sync(&mut note);
         }
     }
 

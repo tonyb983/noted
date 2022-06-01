@@ -1,0 +1,4 @@
+This is a test error log entry
+This is another fake error message
+And here's a third, lets make this one really long. Like super super super super super supser upser upserup super super supser upser upser super duper long.
+De/Serialization error occurred: invalid length 2, expected struct SimpleTime with 3 elements

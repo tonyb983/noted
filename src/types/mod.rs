@@ -5,12 +5,13 @@
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 pub mod api;
+mod changes;
 mod error;
 mod note;
 mod note_dto;
 mod reminder;
 mod taglist;
-mod time;
+pub mod time;
 mod traits;
 
 pub use error::*;
@@ -23,4 +24,4 @@ pub use traits::HasId;
 pub type Action<T> = Box<dyn Fn(&T)>;
 pub type Mapping<T, R> = Box<dyn Fn(&T) -> R>;
 pub type Predicate<T> = Box<dyn Fn(&T) -> bool>;
-pub type Mutation<T> = Box<dyn FnMut(&mut T)>;
+pub type Mutation<T> = Box<dyn Fn(&mut T)>;

@@ -20,7 +20,7 @@ pub fn get_app_theme() -> &'static theme::AppTheme {
 ///
 /// ## Errors
 pub fn execute() -> crate::Result {
-    crate::util::profiling::start_puffin_server(); // NOTE: you may only want to call this if the users specifies some flag or clicks a button!
+    crate::util::profiling::init_profiling("gui");
 
     // let db = crate::db::Database::load_dev()?;
 

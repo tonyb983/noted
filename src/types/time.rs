@@ -349,9 +349,37 @@ mod date {
             Am = 0,
             Pm = 1,
         }
+
+        impl TimePeriod {
+            pub fn is_am(self) -> bool {
+                self == Self::Am
+            }
+
+            pub fn is_pm(self) -> bool {
+                self == Self::Pm
+            }
+
+            pub fn toggle(&mut self) {
+                *self = match self {
+                    Self::Am => Self::Pm,
+                    Self::Pm => Self::Am,
+                };
+            }
+        }
+
+        impl std::fmt::Display for TimePeriod {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                match self {
+                    Self::Am => write!(f, "AM"),
+                    Self::Pm => write!(f, "PM"),
+                }
+            }
+        }
     }
 
     mod hour {
+        use crate::{types::time::reminder_time::Hour12, util::wrapping::WrappedU8};
+
         use super::TimePeriod;
 
         #[derive(
@@ -366,179 +394,115 @@ mod date {
             serde::Deserialize,
             serde::Serialize,
         )]
-        #[repr(u8)]
-        pub enum Hour {
-            Zero = 0,
-            One = 1,
-            Two = 2,
-            Three = 3,
-            Four = 4,
-            Five = 5,
-            Six = 6,
-            Seven = 7,
-            Eight = 8,
-            Nine = 9,
-            Ten = 10,
-            Eleven = 11,
-            Twelve = 12,
-            Thirteen = 13,
-            Fourteen = 14,
-            Fifteen = 15,
-            Sixteen = 16,
-            Seventeen = 17,
-            Eighteen = 18,
-            Nineteen = 19,
-            Twenty = 20,
-            TwentyOne = 21,
-            TwentyTwo = 22,
-            TwentyThree = 23,
-        }
+        pub struct Hour(WrappedU8<0, 23>);
 
         impl Hour {
-            pub fn from_u8_unchecked(n: impl Into<u8>) -> Self {
-                let n = n.into();
-                n.try_into().unwrap()
+            #[must_use]
+            pub fn from_time(t: time::Time) -> Self {
+                Self(WrappedU8::from(t.hour()))
             }
 
+            #[must_use]
+            pub fn from_chrono<T: chrono::Timelike>(c: &T) -> Self {
+                Self(WrappedU8::from(c.hour()))
+            }
+
+            #[must_use]
+            pub fn value(&self) -> u8 {
+                self.0.value()
+            }
+
+            #[must_use]
+            pub const fn from_u8(n: impl Into<u8>) -> Self {
+                let n: u8 = n.into();
+                Self(n.into())
+            }
+
+            #[must_use]
             pub fn to_u8(self) -> u8 {
-                self as u8
+                self.value()
             }
 
+            #[must_use]
             pub fn morning() -> Self {
-                Self::Eight
+                Self(8u8.into())
             }
 
+            #[must_use]
             pub fn afternoon() -> Self {
-                Self::Fourteen
+                Self(14u8.into())
             }
 
+            #[must_use]
             pub fn noon() -> Self {
-                Self::Twelve
+                Self(12u8.into())
             }
 
+            #[must_use]
             pub fn midnight() -> Self {
-                Self::Zero
+                Self(0u8.into())
             }
 
+            #[must_use]
             pub fn evening() -> Self {
-                Self::Twenty
+                Self(20u8.into())
             }
 
-            pub fn twelve_hour(self) -> u8 {
+            #[must_use]
+            pub fn twelve_hour(self) -> Hour12 {
                 self.standard().0
             }
 
+            #[must_use]
             pub fn twenty_four_hour(self) -> u8 {
-                self as u8
+                self.value()
             }
 
-            pub fn standard(self) -> (u8, TimePeriod) {
-                match self {
-                    Self::Zero => (12, TimePeriod::Am),
-                    Self::One => (1, TimePeriod::Am),
-                    Self::Two => (2, TimePeriod::Am),
-                    Self::Three => (3, TimePeriod::Am),
-                    Self::Four => (4, TimePeriod::Am),
-                    Self::Five => (5, TimePeriod::Am),
-                    Self::Six => (6, TimePeriod::Am),
-                    Self::Seven => (7, TimePeriod::Am),
-                    Self::Eight => (8, TimePeriod::Am),
-                    Self::Nine => (9, TimePeriod::Am),
-                    Self::Ten => (10, TimePeriod::Am),
-                    Self::Eleven => (11, TimePeriod::Am),
-                    Self::Twelve => (12, TimePeriod::Pm),
-                    Self::Thirteen => (1, TimePeriod::Pm),
-                    Self::Fourteen => (2, TimePeriod::Pm),
-                    Self::Fifteen => (3, TimePeriod::Pm),
-                    Self::Sixteen => (4, TimePeriod::Pm),
-                    Self::Seventeen => (5, TimePeriod::Pm),
-                    Self::Eighteen => (6, TimePeriod::Pm),
-                    Self::Nineteen => (7, TimePeriod::Pm),
-                    Self::Twenty => (8, TimePeriod::Pm),
-                    Self::TwentyOne => (9, TimePeriod::Pm),
-                    Self::TwentyTwo => (10, TimePeriod::Pm),
-                    Self::TwentyThree => (11, TimePeriod::Pm),
+            #[must_use]
+            pub fn standard(self) -> (Hour12, TimePeriod) {
+                let n = self.value();
+                if n < 12 {
+                    (n.into(), TimePeriod::Am)
+                } else {
+                    ((n - 12).into(), TimePeriod::Pm)
                 }
             }
+
+            #[must_use]
             pub fn military(self) -> (u8, TimePeriod) {
-                let n = self.to_u8();
+                let n = self.value();
                 if n < 12 {
                     (n, TimePeriod::Am)
                 } else {
-                    (n - 12, TimePeriod::Pm)
+                    (n, TimePeriod::Pm)
                 }
             }
         }
 
-        // impl From<u8> for Hour {
-        //     fn from(t: u8) -> Self {
-        //         match t {
-        //             0 => Self::Zero,
-        //             1 => Self::One,
-        //             2 => Self::Two,
-        //             3 => Self::Three,
-        //             4 => Self::Four,
-        //             5 => Self::Five,
-        //             6 => Self::Six,
-        //             7 => Self::Seven,
-        //             8 => Self::Eight,
-        //             9 => Self::Nine,
-        //             10 => Self::Ten,
-        //             11 => Self::Eleven,
-        //             12 => Self::Twelve,
-        //             13 => Self::Thirteen,
-        //             14 => Self::Fourteen,
-        //             15 => Self::Fifteen,
-        //             16 => Self::Sixteen,
-        //             17 => Self::Seventeen,
-        //             18 => Self::Eighteen,
-        //             19 => Self::Nineteen,
-        //             20 => Self::Twenty,
-        //             21 => Self::TwentyOne,
-        //             22 => Self::TwentyTwo,
-        //             23 => Self::TwentyThree,
-        //             _ => panic!("Invalid hour"),
-        //         }
-        //     }
-        // }
+        impl From<u8> for Hour {
+            fn from(t: u8) -> Self {
+                Self(t.into())
+            }
+        }
 
-        impl TryFrom<u8> for Hour {
-            type Error = ();
-
-            fn try_from(value: u8) -> Result<Self, Self::Error> {
-                match value {
-                    0 => Ok(Self::Zero),
-                    1 => Ok(Self::One),
-                    2 => Ok(Self::Two),
-                    3 => Ok(Self::Three),
-                    4 => Ok(Self::Four),
-                    5 => Ok(Self::Five),
-                    6 => Ok(Self::Six),
-                    7 => Ok(Self::Seven),
-                    8 => Ok(Self::Eight),
-                    9 => Ok(Self::Nine),
-                    10 => Ok(Self::Ten),
-                    11 => Ok(Self::Eleven),
-                    12 => Ok(Self::Twelve),
-                    13 => Ok(Self::Thirteen),
-                    14 => Ok(Self::Fourteen),
-                    15 => Ok(Self::Fifteen),
-                    16 => Ok(Self::Sixteen),
-                    17 => Ok(Self::Seventeen),
-                    18 => Ok(Self::Eighteen),
-                    19 => Ok(Self::Nineteen),
-                    20 => Ok(Self::Twenty),
-                    21 => Ok(Self::TwentyOne),
-                    22 => Ok(Self::TwentyTwo),
-                    23 => Ok(Self::TwentyThree),
-                    _ => Err(()),
-                }
+        impl From<u32> for Hour {
+            fn from(t: u32) -> Self {
+                Self(t.into())
             }
         }
 
         impl From<Hour> for u8 {
             fn from(value: Hour) -> Self {
-                value as u8
+                value.value()
+            }
+        }
+
+        impl std::str::FromStr for Hour {
+            type Err = ();
+
+            fn from_str(s: &str) -> Result<Self, Self::Err> {
+                let n = s.parse::<u8>().map_err(|_| ())?;
+                Ok(Self(n.into()))
             }
         }
 
@@ -550,9 +514,7 @@ mod date {
                 reason = "we wrap addition when it comes to hours"
             )]
             fn add(self, rhs: u8) -> Self::Output {
-                let total = (self.to_u8() as u16).saturating_add(rhs as u16);
-                let total = total % 24;
-                Hour::from_u8_unchecked(total as u8)
+                Self((self.value() + rhs).into())
             }
         }
         impl std::ops::AddAssign<u8> for Hour {
@@ -565,13 +527,13 @@ mod date {
             type Output = Self;
 
             #[allow(
-                clippy::suspicious_arithmetic_impl,
-                reason = "we wrap addition when it comes to hours"
+                clippy::cast_possible_wrap,
+                reason = "u8 -> isize HAS to be safe right?"
             )]
             fn sub(self, rhs: u8) -> Self::Output {
-                let total = (self.to_u8() as u16).wrapping_sub(rhs as u16);
-                let total = (total % 24) as u8;
-                Hour::from_u8_unchecked(total)
+                Self(WrappedU8::from_any_signed(
+                    self.value() as isize - rhs as isize,
+                ))
             }
         }
         impl std::ops::SubAssign<u8> for Hour {
@@ -584,7 +546,7 @@ mod date {
             type Output = Self;
 
             fn add(self, rhs: Self) -> Self::Output {
-                self + rhs as u8
+                Self(self.0 + rhs.0)
             }
         }
         impl std::ops::AddAssign<Self> for Hour {
@@ -597,7 +559,7 @@ mod date {
             type Output = Self;
 
             fn sub(self, rhs: Self) -> Self::Output {
-                self - rhs as u8
+                Self(self.0 - rhs.0)
             }
         }
         impl std::ops::SubAssign<Self> for Hour {
@@ -612,9 +574,22 @@ mod date {
     pub use period::TimePeriod;
     pub use weekday::Weekday;
 
+    #[derive(
+        Clone,
+        Copy,
+        Debug,
+        PartialEq,
+        Eq,
+        PartialOrd,
+        Ord,
+        Hash,
+        serde::Deserialize,
+        serde::Serialize,
+    )]
     pub struct Date(time::Date);
 
     impl Date {
+        #[must_use]
         pub fn new(year: i32, month: u8, day: u8) -> Self {
             let month = Month::from_u8_unchecked(month);
             Self(
@@ -623,6 +598,7 @@ mod date {
             )
         }
 
+        #[must_use]
         pub fn from_calendar_date(year: i32, month: impl Into<Month>, day: u8) -> Self {
             let month = month.into();
             Self(
@@ -631,6 +607,7 @@ mod date {
             )
         }
 
+        #[must_use]
         pub fn from_iso_week_date(year: i32, week: u8, weekday: impl Into<Weekday>) -> Self {
             let weekday = weekday.into();
             Self(
@@ -639,40 +616,49 @@ mod date {
             )
         }
 
+        #[must_use]
         pub fn to_calendar_date(&self) -> (i32, Month, u8) {
             let (y, m, d) = self.0.to_calendar_date();
             (y, m.into(), d)
         }
 
+        #[must_use]
         pub fn to_ymd(&self) -> (i32, Month, u8) {
             self.to_calendar_date()
         }
 
+        #[must_use]
         pub fn to_iso_week_date(&self) -> (i32, u8, Weekday) {
             let (y, w, wd) = self.0.to_iso_week_date();
             (y, w, wd.into())
         }
 
+        #[must_use]
         pub fn to_ordinal_date(&self) -> u16 {
             self.0.ordinal()
         }
 
+        #[must_use]
         pub fn year(&self) -> i32 {
             self.0.year()
         }
 
+        #[must_use]
         pub fn month(&self) -> Month {
             self.0.month().into()
         }
 
+        #[must_use]
         pub fn day(&self) -> u8 {
             self.0.day()
         }
 
+        #[must_use]
         pub fn weekday(&self) -> Weekday {
             self.0.weekday().into()
         }
 
+        #[must_use]
         pub fn to_chrono(&self) -> chrono::NaiveDate {
             let (y, w, wd) = self.to_iso_week_date();
             chrono::NaiveDate::from_isoywd(y, w.into(), wd.into())
@@ -684,14 +670,17 @@ mod date {
             *self = chrono_date.into();
         }
 
+        #[must_use]
         pub fn to_chrono_utc(&self) -> chrono::Date<chrono::Utc> {
             chrono::Date::from_utc(self.to_chrono(), chrono::Utc)
         }
 
+        #[must_use]
         pub fn to_chrono_local(&self) -> chrono::Date<chrono::Local> {
             self.to_chrono_utc().with_timezone(&chrono::Local)
         }
 
+        #[must_use]
         pub fn to_timelib(&self) -> time::Date {
             self.0
         }
@@ -744,5 +733,389 @@ mod date {
     }
 }
 
-pub use date::Date;
+mod min {
+    use crate::util::wrapping::WrappedU8;
+
+    #[derive(
+        Clone,
+        Copy,
+        Debug,
+        PartialEq,
+        Eq,
+        PartialOrd,
+        Ord,
+        Hash,
+        serde::Deserialize,
+        serde::Serialize,
+    )]
+    pub struct Minute(WrappedU8<0, 59>);
+
+    impl Minute {
+        #[must_use]
+        pub const fn from_u8(minute: u8) -> Self {
+            Self(WrappedU8::new(minute))
+        }
+
+        #[must_use]
+        pub fn value(&self) -> u8 {
+            self.0.value()
+        }
+
+        #[must_use]
+        pub fn from_1_to_60(minute: u8) -> Self {
+            Self::from_u8(minute.saturating_sub(1))
+        }
+
+        #[must_use]
+        pub fn from_chrono<T: chrono::Timelike>(ct: &T) -> Self {
+            Self(ct.minute().into())
+        }
+
+        #[must_use]
+        pub fn from_time(tt: time::Time) -> Self {
+            Self(tt.minute().into())
+        }
+    }
+
+    impl From<u32> for Minute {
+        fn from(minute: u32) -> Self {
+            Self(WrappedU8::from_any_unsigned(minute as usize))
+        }
+    }
+
+    impl std::str::FromStr for Minute {
+        type Err = ();
+
+        fn from_str(s: &str) -> Result<Self, Self::Err> {
+            let n = s.parse::<u8>().map_err(|_| ())?;
+            Ok(Self(n.into()))
+        }
+    }
+
+    impl std::ops::Add<u8> for Minute {
+        type Output = Self;
+
+        fn add(self, rhs: u8) -> Self::Output {
+            Self(self.0.add(rhs))
+        }
+    }
+
+    impl std::ops::AddAssign<u8> for Minute {
+        fn add_assign(&mut self, rhs: u8) {
+            self.0.add_assign(rhs);
+        }
+    }
+
+    impl std::ops::Sub<u8> for Minute {
+        type Output = Self;
+
+        fn sub(self, rhs: u8) -> Self {
+            Self(self.0.sub(rhs))
+        }
+    }
+
+    impl std::ops::SubAssign<u8> for Minute {
+        fn sub_assign(&mut self, rhs: u8) {
+            self.0.sub_assign(rhs);
+        }
+    }
+
+    impl From<Minute> for u8 {
+        fn from(minute: Minute) -> Self {
+            minute.value()
+        }
+    }
+
+    impl From<u8> for Minute {
+        fn from(minute: u8) -> Self {
+            Self::from_u8(minute)
+        }
+    }
+}
+
+mod reminder_time {
+    use crate::{types::time::date::TimePeriod, util::wrapping::WrappedU8};
+
+    use super::{date::Hour, Date, Minute};
+
+    #[derive(
+        Clone,
+        Copy,
+        Debug,
+        PartialEq,
+        Eq,
+        PartialOrd,
+        Ord,
+        Hash,
+        serde::Deserialize,
+        serde::Serialize,
+    )]
+    pub struct Hour12(WrappedU8<0, 11>);
+
+    impl Hour12 {
+        #[must_use]
+        pub const fn from_u8(hour: u8) -> Self {
+            Self(WrappedU8::new(hour))
+        }
+
+        #[must_use]
+        pub fn value(self) -> u8 {
+            self.0.value()
+        }
+
+        #[must_use]
+        pub fn from_chrono<T: chrono::Timelike>(ct: &T) -> Self {
+            Self(ct.hour().into())
+        }
+
+        #[must_use]
+        pub fn from_time(tt: time::Time) -> Self {
+            Self(tt.hour().into())
+        }
+    }
+
+    impl From<u8> for Hour12 {
+        fn from(hour: u8) -> Self {
+            Self(WrappedU8::new(hour))
+        }
+    }
+
+    impl From<Hour12> for u8 {
+        fn from(hour: Hour12) -> Self {
+            hour.value()
+        }
+    }
+
+    impl From<Hour> for (Hour12, TimePeriod) {
+        fn from(hour: Hour) -> Self {
+            hour.standard()
+        }
+    }
+
+    impl From<(Hour12, TimePeriod)> for Hour {
+        fn from(hour: (Hour12, TimePeriod)) -> Self {
+            match hour.1 {
+                TimePeriod::Am => hour.0.value().into(),
+                TimePeriod::Pm => (hour.0.value() + 12).into(),
+            }
+        }
+    }
+
+    #[derive(
+        Clone,
+        Copy,
+        Debug,
+        PartialEq,
+        Eq,
+        PartialOrd,
+        Ord,
+        Hash,
+        serde::Deserialize,
+        serde::Serialize,
+    )]
+    pub struct SimpleTime {
+        pub hour: Hour12,
+        pub minute: Minute,
+        pub period: TimePeriod,
+    }
+
+    impl SimpleTime {
+        pub fn new(hour: Hour12, minute: Minute, period: TimePeriod) -> Self {
+            Self {
+                hour,
+                minute,
+                period,
+            }
+        }
+
+        pub fn from_military(hour: Hour, minute: Minute) -> Self {
+            let (hr, period) = hour.standard();
+            Self::new(hr, minute, period)
+        }
+
+        pub fn to_military(self) -> (Hour, Minute) {
+            (
+                match self.period {
+                    TimePeriod::Am => self.hour.value().into(),
+                    TimePeriod::Pm => (self.hour.value() + 12).into(),
+                },
+                self.minute,
+            )
+        }
+
+        pub fn to_hmp(self) -> (Hour12, Minute, TimePeriod) {
+            (self.hour, self.minute, self.period)
+        }
+
+        pub fn to_time(self) -> time::Time {
+            let (hour, minute) = self.to_military();
+            time::Time::from_hms(hour.value(), minute.value(), 0)
+                .expect("unable to build time::Time from hms")
+        }
+
+        pub fn to_chrono(self) -> chrono::NaiveTime {
+            let (hour, minute) = self.to_military();
+            chrono::NaiveTime::from_hms(hour.value().into(), minute.value().into(), 0)
+        }
+    }
+
+    impl std::fmt::Display for Hour12 {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            write!(f, "{}", self.value())
+        }
+    }
+
+    impl std::fmt::Display for SimpleTime {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            write!(
+                f,
+                "{:02}:{:02} {}",
+                self.hour.value(),
+                self.minute.value(),
+                self.period
+            )
+        }
+    }
+
+    #[derive(
+        Clone,
+        Copy,
+        Debug,
+        PartialEq,
+        Eq,
+        PartialOrd,
+        Ord,
+        Hash,
+        serde::Deserialize,
+        serde::Serialize,
+    )]
+    pub struct ReminderTime {
+        pub date: Date,
+        pub time: SimpleTime,
+    }
+
+    impl ReminderTime {
+        #[must_use]
+        pub fn epoch() -> Self {
+            Self::from_time_dt(time::OffsetDateTime::UNIX_EPOCH)
+        }
+
+        #[must_use]
+        pub fn to_chrono_date_utc(&self) -> chrono::Date<chrono::Utc> {
+            self.date.to_chrono_utc()
+        }
+
+        #[must_use]
+        pub fn to_chrono_date_local(&self) -> chrono::Date<chrono::Local> {
+            self.to_chrono_dt_local().date()
+        }
+
+        #[must_use]
+        pub fn to_chrono_time(&self) -> chrono::NaiveTime {
+            let (hour, minute) = self.time.to_military();
+            chrono::NaiveTime::from_hms(hour.value().into(), minute.value().into(), 0)
+        }
+
+        #[must_use]
+        pub fn to_time_date(&self) -> time::Date {
+            self.date.to_timelib()
+        }
+
+        #[must_use]
+        pub fn to_time_time(&self) -> time::Time {
+            let (hour, minute) = self.time.to_military();
+            time::Time::from_hms(hour.value(), minute.value(), 0)
+                .expect("unable to build time from hours and minutes")
+        }
+
+        #[must_use]
+        pub fn to_chrono_dt(&self) -> chrono::DateTime<chrono::Utc> {
+            self.to_chrono_date_utc()
+                .and_time(self.to_chrono_time())
+                .expect("unable to build chrono datetime")
+        }
+
+        #[must_use]
+        pub fn to_chrono_dt_local(&self) -> chrono::DateTime<chrono::Local> {
+            self.to_chrono_dt().with_timezone(&chrono::Local)
+        }
+
+        #[must_use]
+        pub fn to_time_dt(&self) -> time::OffsetDateTime {
+            self.to_time_date()
+                .with_time(self.to_time_time())
+                .assume_utc()
+        }
+
+        #[must_use]
+        pub fn to_time_dt_local(&self) -> time::OffsetDateTime {
+            self.to_time_dt().to_offset(
+                time::UtcOffset::current_local_offset()
+                    .expect("unable to get current local offset"),
+            )
+        }
+
+        #[must_use]
+        pub fn from_time_dt(mut dt: time::OffsetDateTime) -> Self {
+            crate::util::dtf::ensure_time_is_utc(&mut dt);
+            let date: Date = dt.date().into();
+            let (hour, min): (Hour, Minute) = {
+                let time = dt.time();
+                let (h, m, _) = time.as_hms();
+                (Hour::from_u8(h), Minute::from_u8(m))
+            };
+            Self {
+                date,
+                time: SimpleTime::from_military(hour, min),
+            }
+        }
+
+        pub fn replace_date_t(&mut self, date: time::Date) {
+            self.date = date.into();
+        }
+
+        pub fn replace_time(&mut self, hour: Hour12, minute: Minute, period: TimePeriod) {
+            self.time = SimpleTime::new(hour, minute, period);
+        }
+
+        pub fn replace_time_t(&mut self, time: time::Time) {
+            let (hour, min, _) = time.as_hms();
+            self.time = SimpleTime::from_military(Hour::from_u8(hour), Minute::from_u8(min));
+        }
+
+        pub fn replace_time_c<T: chrono::Timelike>(&mut self, t: &T) {
+            let hour = t.hour().into();
+            let min = t.minute().into();
+            self.time = SimpleTime::from_military(hour, min);
+        }
+
+        pub fn replace_hour(&mut self, hour: impl Into<Hour12>) {
+            self.time.hour = hour.into();
+        }
+
+        pub fn replace_mins(&mut self, min: impl Into<Minute>) {
+            self.time.minute = min.into();
+        }
+
+        pub fn replace_period(&mut self, period: impl Into<TimePeriod>) {
+            self.time.period = period.into();
+        }
+    }
+}
+
+pub use date::{Date, Hour, TimePeriod};
+pub use min::Minute;
+pub use reminder_time::{Hour12, ReminderTime, SimpleTime};
 pub use timestamp::Timestamp;
+
+impl std::fmt::Display for Hour {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:02}", self.value())
+    }
+}
+
+impl std::fmt::Display for Minute {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:02}", self.value())
+    }
+}
